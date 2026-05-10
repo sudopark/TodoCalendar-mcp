@@ -1,12 +1,12 @@
 import jwt from 'jsonwebtoken'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { callOpenApi, signUserToken } from './client.js'
+import { callOpenApi, signUserToken } from '../../src/openapi/client.js'
 import {
   InsufficientScopeError,
   InvalidParameterError,
   NotFoundError,
   OpenApiError,
-} from './errors.js'
+} from '../../src/openapi/errors.js'
 
 const SIGNING = 'test-signing-secret'
 const PAT = 'mcp_test'
@@ -17,6 +17,20 @@ const mockOk = (body: unknown = {}, status = 200): Response =>
     status,
     headers: { 'Content-Type': 'application/json' },
   })
+
+type FetchCall = [input: string, init: RequestInit]
+interface FetchSpyShape {
+  mock: { calls: unknown[][] }
+}
+
+const getCall = (spy: FetchSpyShape): FetchCall => {
+  const call = spy.mock.calls[0]
+  if (!call) throw new Error('fetch not called')
+  return [call[0] as string, call[1] as RequestInit]
+}
+
+const getHeaders = (spy: FetchSpyShape): Record<string, string> =>
+  getCall(spy)[1].headers as Record<string, string>
 
 beforeEach(() => {
   vi.stubEnv('OPENAPI_BASE_URL', BASE)
@@ -48,15 +62,13 @@ describe('callOpenApi — 헤더 주입', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk({ ok: true }))
     await callOpenApi({ userId: 'u' }, 'GET', '/v2/open/todos')
 
-    const call = fetchSpy.mock.calls[0]
-    if (!call) throw new Error('fetch not called')
-    const init = call[1] as RequestInit
-    const headers = init.headers as Record<string, string>
-
+    const headers = getHeaders(fetchSpy)
     expect(headers.Authorization).toBe(`Bearer ${PAT}`)
     expect(headers['x-open-user-token']).toBeTruthy()
 
-    const decoded = jwt.verify(headers['x-open-user-token']!, SIGNING) as jwt.JwtPayload
+    const decoded = jwt.verify(headers['x-open-user-token']!, SIGNING, {
+      algorithms: ['HS256'],
+    }) as jwt.JwtPayload
     expect(decoded.sub).toBe('u')
     expect(decoded.scope).toEqual(['read:calendar', 'write:calendar'])
   })
@@ -65,18 +77,18 @@ describe('callOpenApi — 헤더 주입', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
     await callOpenApi({ userId: 'u' }, 'GET', '/v2/open/todos')
 
-    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit
+    const [, init] = getCall(fetchSpy)
     expect(init.body).toBeUndefined()
-    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+    expect(getHeaders(fetchSpy)['Content-Type']).toBeUndefined()
   })
 
   it('POST + body — JSON 직렬화 + Content-Type 주입', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
     await callOpenApi({ userId: 'u' }, 'POST', '/v2/open/todos', { name: 'x' })
 
-    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit
+    const [, init] = getCall(fetchSpy)
     expect(init.body).toBe(JSON.stringify({ name: 'x' }))
-    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+    expect(getHeaders(fetchSpy)['Content-Type']).toBe('application/json')
   })
 })
 
@@ -86,14 +98,14 @@ describe('callOpenApi — URL 조립', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
     await callOpenApi({ userId: 'u' }, 'GET', '/v2/open/todos')
 
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe(`${BASE}/v2/open/todos`)
+    expect(getCall(fetchSpy)[0]).toBe(`${BASE}/v2/open/todos`)
   })
 
   it('path 선행 슬래시 누락도 허용', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
     await callOpenApi({ userId: 'u' }, 'GET', 'v2/open/todos')
 
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe(`${BASE}/v2/open/todos`)
+    expect(getCall(fetchSpy)[0]).toBe(`${BASE}/v2/open/todos`)
   })
 })
 
@@ -110,10 +122,9 @@ describe('callOpenApi — 응답 처리', () => {
 
   it('400 → InvalidParameterError', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ status: 400, code: 'InvalidParameter', message: 'bad' }),
-        { status: 400 },
-      ),
+      new Response(JSON.stringify({ status: 400, code: 'InvalidParameter', message: 'bad' }), {
+        status: 400,
+      }),
     )
     await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toBeInstanceOf(
       InvalidParameterError,
@@ -134,10 +145,9 @@ describe('callOpenApi — 응답 처리', () => {
 
   it('404 → NotFoundError', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ status: 404, code: 'NotFound', message: 'gone' }),
-        { status: 404 },
-      ),
+      new Response(JSON.stringify({ status: 404, code: 'NotFound', message: 'gone' }), {
+        status: 404,
+      }),
     )
     await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toBeInstanceOf(NotFoundError)
   })
@@ -158,6 +168,20 @@ describe('callOpenApi — 응답 처리', () => {
     expect(err).toBeInstanceOf(OpenApiError)
     expect((err as OpenApiError).status).toBe(500)
   })
+
+  it('2xx + 빈 body — EmptyBody 에러로 throw (success body invariant 강제)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 200 }))
+    await expect(callOpenApi({ userId: 'u' }, 'DELETE', '/x')).rejects.toMatchObject({
+      status: 200,
+      code: 'EmptyBody',
+    })
+  })
+
+  it('네트워크 에러 (fetch reject) — raw error 그대로 propagate', async () => {
+    const networkErr = new TypeError('fetch failed')
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(networkErr)
+    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toBe(networkErr)
+  })
 })
 
 describe('callOpenApi — env 검증', () => {
@@ -169,5 +193,10 @@ describe('callOpenApi — env 검증', () => {
   it('OPENAPI_PAT_MCP 누락 시 throw', async () => {
     vi.stubEnv('OPENAPI_PAT_MCP', '')
     await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toThrow(/OPENAPI_PAT_MCP/)
+  })
+
+  it('OPENAPI_PAT_MCP가 mcp_ prefix 아니면 throw', async () => {
+    vi.stubEnv('OPENAPI_PAT_MCP', 'wrong_secret')
+    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toThrow(/mcp_/)
   })
 })

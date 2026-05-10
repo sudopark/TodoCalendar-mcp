@@ -5,7 +5,7 @@ import {
   NotFoundError,
   OpenApiError,
   mapOpenApiError,
-} from './errors.js'
+} from '../../src/openapi/errors.js'
 
 describe('mapOpenApiError', () => {
   it('400 InvalidParameter → InvalidParameterError', () => {
