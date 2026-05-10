@@ -79,6 +79,7 @@ describe('mcp server — tools/list', () => {
 
     expect(result.tools.map((t) => t.name).sort()).toEqual([
       'create_tag',
+      'create_todo',
       'get_done_todos',
       'get_event_details',
       'get_schedules',

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
-import { todoSchema } from './shared/schemas.js'
+import { eventTimeSchema, repeatingSchema, todoSchema } from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const TS_SEC = 'Unix epoch seconds (UTC).'
@@ -71,6 +71,52 @@ All timestamps in the response are Unix epoch seconds (UTC). The 'event_time' fi
     const input = getTodosInput.parse(args)
     try {
       return await callOpenApi<GetTodosOutput>(auth, 'GET', dispatchPath(input))
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const createTodoInput = z
+  .object({
+    name: z.string().min(1).describe('Display name for the todo (non-empty).'),
+    event_tag_id: z
+      .string()
+      .optional()
+      .describe('Optional tag uuid to categorize this todo.'),
+    event_time: eventTimeSchema
+      .optional()
+      .describe(
+        "Optional schedule for the todo. Omit to create a 'current' (non-time-bound) todo that stays visible until completed.",
+      ),
+    repeating: repeatingSchema.optional().describe('Optional recurrence rule.'),
+    notification_options: z
+      .array(z.unknown())
+      .optional()
+      .describe('Optional notification config objects (opaque shape — see TodoCalendar app docs).'),
+  })
+  .describe(
+    'Body for creating a new todo. The owner is taken from the auth context — never pass userId here.',
+  )
+
+type CreateTodoInput = z.infer<typeof createTodoInput>
+
+const createTodoOutput = todoSchema
+
+type CreateTodoOutput = z.infer<typeof createTodoOutput>
+
+export const createTodo: ToolDefinition<CreateTodoInput, CreateTodoOutput> = {
+  name: 'create_todo',
+  description: `\
+Create a new todo for the authenticated user. Returns the created todo with its assigned uuid.
+
+If 'event_time' is omitted the todo is created in 'current' mode (non-time-bound, always visible until completed). The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
+  inputSchema: createTodoInput,
+  outputSchema: createTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<CreateTodoOutput> => {
+    const body = createTodoInput.parse(args)
+    try {
+      return await callOpenApi<CreateTodoOutput>(auth, 'POST', '/v2/open/todos/', body)
     } catch (e) {
       return wrapOpenApiError(e)
     }

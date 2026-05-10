@@ -205,6 +205,7 @@ describe('end-to-end — POST /mcp + initialize handshake', () => {
     const payload = JSON.parse(dataLine!.slice(6)) as { result: { tools: { name: string }[] } }
     expect(payload.result.tools.map((t) => t.name).sort()).toEqual([
       'create_tag',
+      'create_todo',
       'get_done_todos',
       'get_event_details',
       'get_schedules',
