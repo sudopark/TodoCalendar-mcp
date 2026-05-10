@@ -212,6 +212,7 @@ describe('end-to-end — POST /mcp + initialize handshake', () => {
       'get_schedules',
       'get_tags',
       'get_todos',
+      'set_event_detail',
     ])
   })
 })
