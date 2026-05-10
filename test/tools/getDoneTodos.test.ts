@@ -1,52 +1,99 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Auth } from '../../src/auth/types.js'
 
-const callOpenApi = vi.fn()
+interface OpenApiSpy {
+  lastAuth: Auth | null
+  lastMethod: string | null
+  lastPath: string | null
+  lastBody: unknown
+  callCount: number
+  responsePayload: unknown
+  responseError: Error | null
+}
+
+const openApiSpy: OpenApiSpy = {
+  lastAuth: null,
+  lastMethod: null,
+  lastPath: null,
+  lastBody: undefined,
+  callCount: 0,
+  responsePayload: null,
+  responseError: null,
+}
 
 vi.mock('../../src/openapi/client.js', () => ({
-  callOpenApi: (...args: unknown[]) => callOpenApi(...args),
+  callOpenApi: async (auth: Auth, method: string, path: string, body?: unknown) => {
+    openApiSpy.lastAuth = auth
+    openApiSpy.lastMethod = method
+    openApiSpy.lastPath = path
+    openApiSpy.lastBody = body
+    openApiSpy.callCount++
+    if (openApiSpy.responseError) throw openApiSpy.responseError
+    return openApiSpy.responsePayload
+  },
 }))
 
 const { getDoneTodos } = await import('../../src/tools/doneTodoTools.js')
 
-const auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1' }
 
 beforeEach(() => {
-  callOpenApi.mockReset()
+  openApiSpy.lastAuth = null
+  openApiSpy.lastMethod = null
+  openApiSpy.lastPath = null
+  openApiSpy.lastBody = undefined
+  openApiSpy.callCount = 0
+  openApiSpy.responseError = null
+  // happy-path default — empty page, no next cursor
+  openApiSpy.responsePayload = { dones: [], next_cursor: null }
 })
 
 describe('get_done_todos', () => {
   it('size 미지정 — default 50으로 호출', async () => {
-    callOpenApi.mockResolvedValue({ dones: [], next_cursor: null })
     await getDoneTodos.execute(auth, {})
-    expect(callOpenApi).toHaveBeenCalledWith(auth, 'GET', '/v2/open/todos/dones/?size=50')
+
+    expect(openApiSpy.lastMethod).toBe('GET')
+    expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=50')
   })
 
   it('size 명시 — 그대로', async () => {
-    callOpenApi.mockResolvedValue({ dones: [] })
     await getDoneTodos.execute(auth, { size: 30 })
-    expect(callOpenApi).toHaveBeenCalledWith(auth, 'GET', '/v2/open/todos/dones/?size=30')
+
+    expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=30')
   })
 
   it('cursor 있으면 size+cursor 둘 다', async () => {
-    callOpenApi.mockResolvedValue({ dones: [] })
     await getDoneTodos.execute(auth, { size: 20, cursor: 1_700_000_000 })
-    expect(callOpenApi).toHaveBeenCalledWith(
-      auth,
-      'GET',
-      '/v2/open/todos/dones/?size=20&cursor=1700000000',
-    )
+
+    expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=20&cursor=1700000000')
+  })
+
+  it('cursor=null — round-trip 허용 (이전 응답의 next_cursor=null을 그대로 전달 가능)', async () => {
+    await getDoneTodos.execute(auth, { size: 20, cursor: null })
+
+    expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=20')
+  })
+
+  it('Tool 인자에 userId 변조 시도 — 무시', async () => {
+    await getDoneTodos.execute(auth, { size: 10, userId: 'attacker' })
+
+    expect(openApiSpy.lastAuth).toBe(auth)
+    expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=10')
   })
 
   it('size > 200 — zod throw', async () => {
     await expect(getDoneTodos.execute(auth, { size: 201 })).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
   })
 
   it('size < 1 — zod throw', async () => {
     await expect(getDoneTodos.execute(auth, { size: 0 })).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
   })
 
   it('size 비정수 — zod throw', async () => {
     await expect(getDoneTodos.execute(auth, { size: 1.5 })).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
   })
 
   it('raw 응답 통과 — done_at·next_cursor 보존', async () => {
@@ -61,8 +108,10 @@ describe('get_done_todos', () => {
       ],
       next_cursor: 1_699_000_000,
     }
-    callOpenApi.mockResolvedValue(raw)
+    openApiSpy.responsePayload = raw
+
     const result = await getDoneTodos.execute(auth, { size: 1 })
+
     expect(result).toEqual(raw)
   })
 })

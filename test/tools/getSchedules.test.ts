@@ -1,37 +1,76 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Auth } from '../../src/auth/types.js'
 import { InvalidParameterError } from '../../src/openapi/errors.js'
 
-const callOpenApi = vi.fn()
+interface OpenApiSpy {
+  lastAuth: Auth | null
+  lastMethod: string | null
+  lastPath: string | null
+  lastBody: unknown
+  callCount: number
+  responsePayload: unknown
+  responseError: Error | null
+}
+
+const openApiSpy: OpenApiSpy = {
+  lastAuth: null,
+  lastMethod: null,
+  lastPath: null,
+  lastBody: undefined,
+  callCount: 0,
+  responsePayload: null,
+  responseError: null,
+}
 
 vi.mock('../../src/openapi/client.js', () => ({
-  callOpenApi: (...args: unknown[]) => callOpenApi(...args),
+  callOpenApi: async (auth: Auth, method: string, path: string, body?: unknown) => {
+    openApiSpy.lastAuth = auth
+    openApiSpy.lastMethod = method
+    openApiSpy.lastPath = path
+    openApiSpy.lastBody = body
+    openApiSpy.callCount++
+    if (openApiSpy.responseError) throw openApiSpy.responseError
+    return openApiSpy.responsePayload
+  },
 }))
 
 const { getSchedules } = await import('../../src/tools/scheduleTools.js')
 
-const auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1' }
 
 beforeEach(() => {
-  callOpenApi.mockReset()
+  openApiSpy.lastAuth = null
+  openApiSpy.lastMethod = null
+  openApiSpy.lastPath = null
+  openApiSpy.lastBody = undefined
+  openApiSpy.callCount = 0
+  openApiSpy.responseError = null
+  openApiSpy.responsePayload = []
 })
 
 describe('get_schedules', () => {
   it('lower/upper 쿼리스트링으로 호출', async () => {
-    callOpenApi.mockResolvedValue([])
     await getSchedules.execute(auth, { lower: 1_700_000_000, upper: 1_700_086_400 })
-    expect(callOpenApi).toHaveBeenCalledWith(
-      auth,
-      'GET',
-      '/v2/open/schedules/?lower=1700000000&upper=1700086400',
-    )
+
+    expect(openApiSpy.lastMethod).toBe('GET')
+    expect(openApiSpy.lastPath).toBe('/v2/open/schedules/?lower=1700000000&upper=1700086400')
   })
 
   it('lower 누락 — zod throw', async () => {
     await expect(getSchedules.execute(auth, { upper: 1 })).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
   })
 
   it('upper 누락 — zod throw', async () => {
     await expect(getSchedules.execute(auth, { lower: 1 })).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
+  })
+
+  it('Tool 인자에 userId 변조 시도 — 무시', async () => {
+    await getSchedules.execute(auth, { lower: 1, upper: 2, userId: 'attacker' })
+
+    expect(openApiSpy.lastAuth).toBe(auth)
+    expect(openApiSpy.lastPath).toBe('/v2/open/schedules/?lower=1&upper=2')
   })
 
   it('raw 응답 통과 — userId·exclude_repeatings 보존', async () => {
@@ -48,13 +87,16 @@ describe('get_schedules', () => {
         exclude_repeatings: [1_700_604_800],
       },
     ]
-    callOpenApi.mockResolvedValue(raw)
+    openApiSpy.responsePayload = raw
+
     const result = await getSchedules.execute(auth, { lower: 0, upper: 9_999_999_999 })
+
     expect(result).toEqual(raw)
   })
 
   it('OpenApiError → ToolError', async () => {
-    callOpenApi.mockRejectedValue(new InvalidParameterError('range invalid'))
+    openApiSpy.responseError = new InvalidParameterError('range invalid')
+
     await expect(getSchedules.execute(auth, { lower: 2, upper: 1 })).rejects.toThrow(
       /The request parameters are invalid\. \(range invalid\)/,
     )

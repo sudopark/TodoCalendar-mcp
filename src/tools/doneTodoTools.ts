@@ -21,12 +21,12 @@ const getDoneTodosInput = z
       ),
     cursor: z
       .number()
-      .optional()
+      .nullish()
       .describe(
-        'Opaque pagination cursor — pass the value of `next_cursor` from the previous response to fetch the next page. Omit on first call.',
+        'Opaque pagination cursor — pass the `next_cursor` value from the previous response to fetch the next page. Omit on the first call. Null is also accepted (treated as no cursor) so that callers can round-trip the response value verbatim.',
       ),
   })
-  .describe('Pagination cursor based on the most recently returned `next_cursor`.')
+  .describe('Page size and optional pagination cursor (from the previous response\'s `next_cursor`).')
 
 type GetDoneTodosInput = z.infer<typeof getDoneTodosInput>
 
@@ -52,9 +52,14 @@ Use 'cursor' to fetch the next page — pass the 'next_cursor' value from the pr
   outputSchema: getDoneTodosOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetDoneTodosOutput> => {
     const { size, cursor } = getDoneTodosInput.parse(args)
-    const qs = cursor === undefined ? `?size=${size}` : `?size=${size}&cursor=${cursor}`
+    const qs = new URLSearchParams({ size: String(size) })
+    if (cursor !== undefined && cursor !== null) qs.set('cursor', String(cursor))
     try {
-      return await callOpenApi<GetDoneTodosOutput>(auth, 'GET', `/v2/open/todos/dones/${qs}`)
+      return await callOpenApi<GetDoneTodosOutput>(
+        auth,
+        'GET',
+        `/v2/open/todos/dones/?${qs.toString()}`,
+      )
     } catch (e) {
       return wrapOpenApiError(e)
     }

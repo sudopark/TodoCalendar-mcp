@@ -8,12 +8,25 @@ import { getTodos } from './todoTools.js'
 export type { ToolDefinition, AnyToolDefinition } from './shared/tool.js'
 export { ToolError } from './shared/errors.js'
 
-export const tools: Readonly<Record<string, AnyToolDefinition>> = Object.freeze({
-  [getTodos.name]: getTodos as AnyToolDefinition,
-  [getSchedules.name]: getSchedules as AnyToolDefinition,
-  [getTags.name]: getTags as AnyToolDefinition,
-  [getEventDetails.name]: getEventDetails as AnyToolDefinition,
-  [getDoneTodos.name]: getDoneTodos as AnyToolDefinition,
-})
+const buildRegistry = (
+  defs: readonly AnyToolDefinition[],
+): Readonly<Record<string, AnyToolDefinition>> => {
+  const map: Record<string, AnyToolDefinition> = {}
+  for (const def of defs) {
+    if (map[def.name] !== undefined) {
+      throw new Error(`Duplicate tool name in registry: ${def.name}`)
+    }
+    map[def.name] = def
+  }
+  return Object.freeze(map)
+}
+
+export const tools = buildRegistry([
+  getTodos as AnyToolDefinition,
+  getSchedules as AnyToolDefinition,
+  getTags as AnyToolDefinition,
+  getEventDetails as AnyToolDefinition,
+  getDoneTodos as AnyToolDefinition,
+])
 
 export { getDoneTodos, getEventDetails, getSchedules, getTags, getTodos }
