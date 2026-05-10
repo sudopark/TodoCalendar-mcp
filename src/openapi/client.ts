@@ -1,15 +1,10 @@
 import jwt from 'jsonwebtoken'
 import type { Auth } from '../auth/types.js'
+import { requireEnv } from '../internal/env.js'
 import { OpenApiError, mapOpenApiError } from './errors.js'
 import type { HttpMethod } from './types.js'
 
 const PAT_PREFIX = 'mcp_'
-
-const requireEnv = (key: string): string => {
-  const v = process.env[key]
-  if (v === undefined || v === '') throw new Error(`Missing env: ${key}`)
-  return v
-}
 
 const requirePat = (): string => {
   const v = requireEnv('OPENAPI_PAT_MCP')
