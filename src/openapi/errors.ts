@@ -54,5 +54,5 @@ export const mapOpenApiError = (status: number, body: unknown): OpenApiError => 
         return new OpenApiError(body.status, body.code, body.message)
     }
   }
-  return new OpenApiError(status, 'Unknown', `openAPI ${status}`)
+  return new OpenApiError(status, 'Unknown', `openAPI ${status} (non-standard body)`)
 }

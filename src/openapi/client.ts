@@ -1,11 +1,21 @@
 import jwt from 'jsonwebtoken'
 import type { Auth } from '../auth/types.js'
-import { mapOpenApiError } from './errors.js'
+import { OpenApiError, mapOpenApiError } from './errors.js'
 import type { HttpMethod } from './types.js'
+
+const PAT_PREFIX = 'mcp_'
 
 const requireEnv = (key: string): string => {
   const v = process.env[key]
-  if (!v) throw new Error(`Missing env: ${key}`)
+  if (v === undefined || v === '') throw new Error(`Missing env: ${key}`)
+  return v
+}
+
+const requirePat = (): string => {
+  const v = requireEnv('OPENAPI_PAT_MCP')
+  if (!v.startsWith(PAT_PREFIX)) {
+    throw new Error(`OPENAPI_PAT_MCP must start with "${PAT_PREFIX}"`)
+  }
   return v
 }
 
@@ -35,7 +45,7 @@ export const callOpenApi = async <T>(
   body?: unknown,
 ): Promise<T> => {
   const baseUrl = requireEnv('OPENAPI_BASE_URL').replace(/\/$/, '')
-  const pat = requireEnv('OPENAPI_PAT_MCP')
+  const pat = requirePat()
   const userToken = signUserToken(auth)
 
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
@@ -56,6 +66,9 @@ export const callOpenApi = async <T>(
 
   if (!res.ok) {
     throw mapOpenApiError(res.status, parsed)
+  }
+  if (parsed === undefined) {
+    throw new OpenApiError(res.status, 'EmptyBody', `openAPI ${res.status} returned empty body`)
   }
   return parsed as T
 }
