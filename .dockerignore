@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+.git
+.github
+.gitignore
+*.md
+.eslintcache
+.idea
+.vscode
+.DS_Store
+.nvmrc
