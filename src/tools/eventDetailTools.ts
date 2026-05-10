@@ -47,3 +47,57 @@ The active vs done routing is governed by the 'is_done' input flag — set it ba
     }
   },
 }
+
+const eventDetailInput = z
+  .object({
+    place: z.string().optional().describe('Optional place / location string.'),
+    url: z.string().optional().describe('Optional URL associated with the event.'),
+    memo: z.string().optional().describe('Optional free-form memo.'),
+  })
+  .describe(
+    'Detail metadata payload. All fields are optional — server-side this is an upsert (omitted fields are unset on the stored detail).',
+  )
+
+const setEventDetailInput = z
+  .object({
+    event_id: z
+      .string()
+      .min(1)
+      .describe(
+        'UUID of the todo, schedule, or done-todo whose detail metadata is being upserted. Empty string is rejected to avoid hitting the wrong route.',
+      ),
+    is_done: z
+      .boolean()
+      .describe(
+        "Set to true when event_id refers to a done-todo (came from get_done_todos), false for active todos and schedules. Routes the request to the matching collection — the server doesn't auto-detect.",
+      ),
+    detail: eventDetailInput,
+  })
+  .describe('Upsert (PUT) the detail metadata for one event. The owner is taken from the auth context.')
+
+type SetEventDetailInput = z.infer<typeof setEventDetailInput>
+
+const setEventDetailOutput = eventDetailSchema
+
+type SetEventDetailOutput = z.infer<typeof setEventDetailOutput>
+
+export const setEventDetail: ToolDefinition<SetEventDetailInput, SetEventDetailOutput> = {
+  name: 'set_event_detail',
+  description: `\
+Upsert detail metadata (place, url, memo) for a specific event.
+
+The active vs done routing is governed by the 'is_done' input flag — set it based on which list the event came from (active todos/schedules → false; done todos → true). All fields inside 'detail' are optional; this is an upsert and omitted fields are unset.`,
+  inputSchema: setEventDetailInput,
+  outputSchema: setEventDetailOutput,
+  execute: async (auth: Auth, args: unknown): Promise<SetEventDetailOutput> => {
+    const { event_id, is_done, detail } = setEventDetailInput.parse(args)
+    const path = is_done
+      ? `/v2/open/event_details/done/${encodeURIComponent(event_id)}`
+      : `/v2/open/event_details/${encodeURIComponent(event_id)}`
+    try {
+      return await callOpenApi<SetEventDetailOutput>(auth, 'PUT', path, detail)
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}

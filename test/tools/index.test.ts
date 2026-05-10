@@ -12,6 +12,7 @@ describe('tools registry', () => {
       'get_schedules',
       'get_tags',
       'get_todos',
+      'set_event_detail',
     ])
   })
 
