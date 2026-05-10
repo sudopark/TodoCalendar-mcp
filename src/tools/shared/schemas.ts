@@ -33,10 +33,11 @@ const repeatingOptionDescribe = `\
 Recurrence rule object discriminated by 'optionType'. Variants:
   - { optionType: 'every_day', interval: int(1..999) }
   - { optionType: 'every_week', interval: int(1..5), dayOfWeek: int[] (1=Sun..7=Sat), timeZone: IANA id }
-  - { optionType: 'every_month', interval: int(1..11), monthDaySelection: { days: int[] (1..31) } | { weekOrdinals: ({ isLast: true } | { isLast: false, seq: int })[], weekDays: int[] }, timeZone: IANA id }
-  - { optionType: 'every_year', interval: int(1..99), months: int[] (1..12), weekOrdinals: ({ isLast: true } | { isLast: false, seq: int })[], dayOfWeek: int[], timeZone: IANA id }
-  - { optionType: 'every_year_some_day', interval: int, month: int, day: int, timeZone: IANA id }
-  - { optionType: 'lunar_calendar_every_year', month: int, day: int, timeZone: IANA id }`
+  - { optionType: 'every_month', interval: int(1..11), monthDaySelection: { days: int[] (1..31) } | { weekOrdinals: ({ isLast: true } | { isLast: false, seq: int })[], weekDays: int[] (1=Sun..7=Sat) }, timeZone: IANA id }
+  - { optionType: 'every_year', interval: int(1..99), months: int[] (1..12), weekOrdinals: ({ isLast: true } | { isLast: false, seq: int })[], dayOfWeek: int[] (1=Sun..7=Sat), timeZone: IANA id }
+  - { optionType: 'every_year_some_day', interval: int(>=1), month: int(1..12), day: int(1..31), timeZone: IANA id }
+  - { optionType: 'lunar_calendar_every_year', month: int(1..12), day: int(1..30), timeZone: IANA id }
+NOTE on key naming asymmetry across variants: 'every_month.monthDaySelection' uses 'weekDays' (plural form via 'monthDaySelection.weekDays') while 'every_year' uses 'dayOfWeek' (singular field name, holds an array). Don't confuse the two when round-tripping. Snapshot of TodoCalendar iOS EventRepeatingOption+CodableMapper.swift as of 2026-05-10.`
 
 export const repeatingSchema = z
   .object({
@@ -50,12 +51,16 @@ export const repeatingSchema = z
 export const todoSchema = z
   .object({
     uuid: z.string().describe('Stable id used to reference this todo in subsequent calls.'),
-    userId: z.string().describe('Owner user id (always equals the authenticated caller).'),
+    userId: z
+      .string()
+      .describe(
+        'Owner user id as recorded by the openAPI. Typically the authenticated caller; preserved verbatim so consumers can audit/cache the raw payload.',
+      ),
     name: z.string(),
     is_current: z
       .boolean()
       .describe(
-        'True if this is a "current" (non-time-bound) todo that should always be visible until completed.',
+        'True if this is a "current" (non-time-bound) todo that should always be visible until completed. Typically equivalent to `event_time` being absent, but treat this field as the source of truth — the equivalence is not guaranteed in all cases by the openAPI contract.',
       ),
     create_timestamp: z.number().describe(TS_SEC),
     event_tag_id: z.string().nullish(),

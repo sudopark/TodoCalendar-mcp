@@ -32,11 +32,12 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
   outputSchema: getSchedulesOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetSchedulesOutput> => {
     const { lower, upper } = getSchedulesInput.parse(args)
+    const qs = new URLSearchParams({ lower: String(lower), upper: String(upper) })
     try {
       return await callOpenApi<GetSchedulesOutput>(
         auth,
         'GET',
-        `/v2/open/schedules/?lower=${lower}&upper=${upper}`,
+        `/v2/open/schedules/?${qs.toString()}`,
       )
     } catch (e) {
       return wrapOpenApiError(e)

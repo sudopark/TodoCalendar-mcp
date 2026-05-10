@@ -9,8 +9,9 @@ const getEventDetailsInput = z
   .object({
     event_id: z
       .string()
+      .min(1)
       .describe(
-        'UUID of the todo, schedule, or done-todo whose detail metadata is requested.',
+        'UUID of the todo, schedule, or done-todo whose detail metadata is requested. Empty string is rejected to avoid colliding with the list endpoint.',
       ),
     is_done: z
       .boolean()

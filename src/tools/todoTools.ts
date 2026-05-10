@@ -40,10 +40,17 @@ const dispatchPath = (input: GetTodosInput): string => {
   switch (input.mode) {
     case 'current':
       return '/v2/open/todos/'
-    case 'range':
-      return `/v2/open/todos/?lower=${input.lower}&upper=${input.upper}`
-    case 'uncompleted':
-      return `/v2/open/todos/uncompleted?refTime=${input.refTime}`
+    case 'range': {
+      const qs = new URLSearchParams({
+        lower: String(input.lower),
+        upper: String(input.upper),
+      })
+      return `/v2/open/todos/?${qs.toString()}`
+    }
+    case 'uncompleted': {
+      const qs = new URLSearchParams({ refTime: String(input.refTime) })
+      return `/v2/open/todos/uncompleted?${qs.toString()}`
+    }
   }
 }
 

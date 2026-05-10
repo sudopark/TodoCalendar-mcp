@@ -95,12 +95,14 @@ scope claim 빠지면 openAPI가 403 `InsufficientScope` 반환. forward 개념 
 
 응답 페이로드는 **openAPI raw 그대로 노출** — timestamp(Unix sec) 변환·필드 rename·필드 드롭 모두 안 함. round-trip(read → modify → write)·소비자 캐시·감사로그가 무손실로 동작해야 하므로 (`userId` 같은 redundant 필드도 보존 — 클라 파싱 영향 추적 비용 > 보존 비용).
 
+`outputSchema`는 **문서화 채널 전용**이다. `tool.execute`는 `outputSchema.parse(result)`를 호출하면 안 됨 — 런타임 검증을 끼우는 순간 unknown 필드를 drop하거나 type coerce가 일어나서 raw passthrough 약속이 깨진다. zod로 정의된 모양은 MCP가 LLM에 노출하는 description 채널일 뿐, 실제 페이로드는 fetch가 돌려준 객체를 그대로 cast해서 통과시킨다.
+
 LLM이 raw를 해석하도록 돕는 채널은 **MCP가 LLM에 보내는 schema description뿐**:
 
-- tool `description`: 응답 모양·timestamp 단위(Unix epoch seconds, UTC)·discriminator 규칙(예: `event_time.time_type`)
+- tool `description`: 응답 모양·timestamp 단위(Unix epoch seconds, UTC)·discriminator 규칙(예: `event_time.time_type`, `repeating.option.optionType`)
 - `inputSchema` / `outputSchema` 각 필드 `.describe()`: 단위·의미·optional 의도
 
-예외는 **에러**: `InvalidParameter` / `NotFound` / `InsufficientScope` 등 코드는 자연어 메시지로 보강. 에러는 round-trip 대상 아니므로 보강해도 무손실 깨지지 않음.
+예외는 **에러**: `InvalidParameter` / `NotFound` / `InsufficientScope` 등 코드는 자연어 메시지로 보강. 단 `code`·`status`는 `ToolError`에 그대로 보존 — 호출자가 분기·재시도·로그 분류에 쓰므로 자연어 메시지는 *추가*되는 면이지 대체되는 면이 아니다. 에러는 round-trip 대상 아니므로 보강해도 무손실 깨지지 않음.
 
 ### 7. Library export 면을 좁게 유지, breaking은 major 버전
 
