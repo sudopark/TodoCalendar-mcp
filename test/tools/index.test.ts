@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { tools } from '../../src/tools/index.js'
 
 describe('tools registry', () => {
-  it('5개 tool 모두 등록 — 키는 각 tool의 name과 일치', () => {
+  it('등록된 tool 모두 — 키는 각 tool의 name과 일치', () => {
     expect(Object.keys(tools).sort()).toEqual([
+      'create_tag',
       'get_done_todos',
       'get_event_details',
       'get_schedules',

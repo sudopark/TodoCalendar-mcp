@@ -2,7 +2,7 @@ import { getDoneTodos } from './doneTodoTools.js'
 import { getEventDetails } from './eventDetailTools.js'
 import { getSchedules } from './scheduleTools.js'
 import type { AnyToolDefinition } from './shared/tool.js'
-import { getTags } from './tagTools.js'
+import { createTag, getTags } from './tagTools.js'
 import { getTodos } from './todoTools.js'
 
 export type { ToolDefinition, AnyToolDefinition } from './shared/tool.js'
@@ -27,6 +27,7 @@ export const tools = buildRegistry([
   getTags as AnyToolDefinition,
   getEventDetails as AnyToolDefinition,
   getDoneTodos as AnyToolDefinition,
+  createTag as AnyToolDefinition,
 ])
 
-export { getDoneTodos, getEventDetails, getSchedules, getTags, getTodos }
+export { createTag, getDoneTodos, getEventDetails, getSchedules, getTags, getTodos }
