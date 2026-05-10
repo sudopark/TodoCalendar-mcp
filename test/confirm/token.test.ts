@@ -103,14 +103,52 @@ describe('verifyConfirmToken — reject', () => {
     )
   })
 
-  it('algorithm none 토큰 거부 — Invalid (alg whitelist)', () => {
+  it('algorithm none 토큰 거부 — Invalid (alg whitelist, CLAUDE.md §1)', () => {
     const noneTok = jwt.sign({ tool: 'delete_todo', argsHash: 'x' }, '', {
       algorithm: 'none',
       expiresIn: 300,
     })
     expect(() => verifyConfirmToken(noneTok, 'delete_todo', { id: 'a' })).toThrow(
-      ConfirmTokenError,
+      expect.objectContaining({ reason: 'Invalid' }) as Partial<ConfirmTokenError>,
     )
+  })
+
+  it('문자열 payload 토큰 거부 — Invalid', () => {
+    const stringTok = jwt.sign('raw-string-payload', SECRET, { algorithm: 'HS256' })
+    expect(() => verifyConfirmToken(stringTok, 'delete_todo', { id: 'a' })).toThrow(
+      expect.objectContaining({ reason: 'Invalid' }) as Partial<ConfirmTokenError>,
+    )
+  })
+})
+
+describe('canonical args hash — edge cases', () => {
+  it('{a: undefined} ≡ {} — JSON 표준과 정렬', () => {
+    const token = signConfirmToken('delete_todo', { a: undefined })
+    expect(() => verifyConfirmToken(token, 'delete_todo', {})).not.toThrow()
+  })
+
+  it('{a: undefined} ≢ {a: null}', () => {
+    const token = signConfirmToken('delete_todo', { a: undefined })
+    expect(() => verifyConfirmToken(token, 'delete_todo', { a: null })).toThrow(
+      expect.objectContaining({ reason: 'ArgsMismatch' }) as Partial<ConfirmTokenError>,
+    )
+  })
+
+  it('Date — 같은 시각이면 같은 hash', () => {
+    const t = '2026-05-10T12:34:56.000Z'
+    const token = signConfirmToken('delete_schedule', { at: new Date(t) })
+    expect(() => verifyConfirmToken(token, 'delete_schedule', { at: new Date(t) })).not.toThrow()
+  })
+
+  it('Date — 다른 시각이면 다른 hash', () => {
+    const token = signConfirmToken('delete_schedule', {
+      at: new Date('2026-05-10T12:34:56Z'),
+    })
+    expect(() =>
+      verifyConfirmToken(token, 'delete_schedule', {
+        at: new Date('2026-05-10T12:34:57Z'),
+      }),
+    ).toThrow(expect.objectContaining({ reason: 'ArgsMismatch' }) as Partial<ConfirmTokenError>)
   })
 })
 

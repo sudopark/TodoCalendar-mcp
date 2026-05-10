@@ -1,19 +1,19 @@
 import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
+import { requireEnv } from '../internal/env.js'
 
 const TTL_SECONDS = 5 * 60
 
-const requireEnv = (key: string): string => {
-  const v = process.env[key]
-  if (v === undefined || v === '') throw new Error(`Missing env: ${key}`)
-  return v
-}
-
+// args는 plain JSON value를 가정. Date는 toISOString으로 정규화.
+// BigInt/Map/Set 등은 JSON 직렬화 단계에서 throw — 호출자가 zod로 거르고 들어오는 게 정상 경로.
 const canonical = (v: unknown): string => {
+  if (v instanceof Date) return JSON.stringify(v.toISOString())
   if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null'
   if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`
   const obj = v as Record<string, unknown>
-  const keys = Object.keys(obj).sort()
+  const keys = Object.keys(obj)
+    .sort()
+    .filter((k) => obj[k] !== undefined)
   return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(obj[k])}`).join(',')}}`
 }
 
@@ -32,12 +32,6 @@ export class ConfirmTokenError extends Error {
   }
 }
 
-export interface ConfirmPayload {
-  tool: string
-  argsHash: string
-  exp: number
-}
-
 export const signConfirmToken = (tool: string, args: unknown): string => {
   return jwt.sign(
     { tool, argsHash: computeArgsHash(args) },
@@ -49,10 +43,15 @@ export const signConfirmToken = (tool: string, args: unknown): string => {
 export const verifyConfirmToken = (token: string, tool: string, args: unknown): void => {
   let decoded: jwt.JwtPayload
   try {
-    decoded = jwt.verify(token, requireEnv('CONFIRM_SECRET'), {
+    const result = jwt.verify(token, requireEnv('CONFIRM_SECRET'), {
       algorithms: ['HS256'],
-    }) as jwt.JwtPayload
+    })
+    if (typeof result === 'string' || result === null) {
+      throw new ConfirmTokenError('Invalid', 'unexpected string payload')
+    }
+    decoded = result
   } catch (e) {
+    if (e instanceof ConfirmTokenError) throw e
     if (e instanceof jwt.TokenExpiredError) {
       throw new ConfirmTokenError('Expired', 'confirm token expired')
     }
