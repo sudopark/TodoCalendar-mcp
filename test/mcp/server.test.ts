@@ -72,12 +72,13 @@ beforeEach(() => {
 })
 
 describe('mcp server — tools/list', () => {
-  it('등록된 5개 tool 모두 노출', async () => {
+  it('등록된 tool 모두 노출', async () => {
     const { client } = await wireServer()
 
     const result = await client.listTools()
 
     expect(result.tools.map((t) => t.name).sort()).toEqual([
+      'create_tag',
       'get_done_todos',
       'get_event_details',
       'get_schedules',

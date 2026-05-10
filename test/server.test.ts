@@ -188,7 +188,7 @@ describe('end-to-end — POST /mcp + initialize handshake', () => {
     expect(payload.result.serverInfo.name).toBe('todocalendar-mcp')
   })
 
-  it('tools/list — fresh server에 init 없이 바로 보내도 5개 tool 응답 (stateless)', async () => {
+  it('tools/list — fresh server에 init 없이 바로 보내도 등록된 tool 모두 응답 (stateless)', async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: {
@@ -204,6 +204,7 @@ describe('end-to-end — POST /mcp + initialize handshake', () => {
     const dataLine = text.split('\n').find((l) => l.startsWith('data: '))
     const payload = JSON.parse(dataLine!.slice(6)) as { result: { tools: { name: string }[] } }
     expect(payload.result.tools.map((t) => t.name).sort()).toEqual([
+      'create_tag',
       'get_done_todos',
       'get_event_details',
       'get_schedules',
