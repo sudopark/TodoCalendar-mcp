@@ -91,9 +91,16 @@ scope claim 빠지면 openAPI가 403 `InsufficientScope` 반환. forward 개념 
 
 즉시 실행 X — 첫 호출에 `confirmToken` (HMAC, 5분 TTL) 발급, 클라가 confirmToken으로 재호출하면 실행. 대상: `delete_todo`, `delete_schedule` (issue #1 §2.4). lib 직접 호출 경로에도 동일 적용.
 
-### 6. AI 친화 변환은 Tool 레이어 책임
+### 6. Tool 응답: openAPI raw 통과 + schema description으로 LLM 보조
 
-openAPI는 시멘틱 raw 데이터만 노출 (timestamp 숫자, 원본 필드명, 에러 코드). Tool에서 `output_schema` 정의 시 ISO 8601 변환, 필드명 단순화, 에러 메시지 자연어화를 책임진다.
+응답 페이로드는 **openAPI raw 그대로 노출** — timestamp(Unix sec) 변환·필드 rename·필드 드롭 모두 안 함. round-trip(read → modify → write)·소비자 캐시·감사로그가 무손실로 동작해야 하므로 (`userId` 같은 redundant 필드도 보존 — 클라 파싱 영향 추적 비용 > 보존 비용).
+
+LLM이 raw를 해석하도록 돕는 채널은 **MCP가 LLM에 보내는 schema description뿐**:
+
+- tool `description`: 응답 모양·timestamp 단위(Unix epoch seconds, UTC)·discriminator 규칙(예: `event_time.time_type`)
+- `inputSchema` / `outputSchema` 각 필드 `.describe()`: 단위·의미·optional 의도
+
+예외는 **에러**: `InvalidParameter` / `NotFound` / `InsufficientScope` 등 코드는 자연어 메시지로 보강. 에러는 round-trip 대상 아니므로 보강해도 무손실 깨지지 않음.
 
 ### 7. Library export 면을 좁게 유지, breaking은 major 버전
 
