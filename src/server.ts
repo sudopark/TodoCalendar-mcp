@@ -2,10 +2,27 @@ import http, { type IncomingMessage, type Server as HttpServer, type ServerRespo
 import 'dotenv/config'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import { AuthRequiredError, extractDevAuth } from './middleware/auth.js'
+import { OAuthTokenError } from './auth/oauthVerify.js'
+import {
+  type AuthExtractor,
+  AuthRequiredError,
+  extractDevAuth,
+  extractOAuthAuth,
+} from './middleware/auth.js'
 import { createMcpServer } from './mcp/server.js'
+import { tools } from './tools/index.js'
 
 type AuthedRequest = IncomingMessage & { auth?: AuthInfo }
+
+export type AuthMode = 'oauth' | 'dev'
+
+const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource'
+
+// distinct scope set across the registry — RFC 9728 `scopes_supported`.
+// Derived once at module load (tools is frozen).
+const SUPPORTED_SCOPES: readonly string[] = [
+  ...new Set(Object.values(tools).flatMap((t) => t.scopes)),
+].sort()
 
 const writeJson = (res: ServerResponse, status: number, body: unknown): void => {
   res.statusCode = status
@@ -34,12 +51,51 @@ export const parseAllowedHosts = (raw: string | undefined): string[] | undefined
   return list.length > 0 ? list : undefined
 }
 
+export const resolveAuthMode = (raw: string | undefined): AuthMode =>
+  raw === 'dev' ? 'dev' : 'oauth'
+
 export interface HttpServerOptions {
   /**
    * DNS rebinding 보호용 호스트 화이트리스트. undefined면 protection 비활성 (로컬 dev 기본).
    * 운영 배포 시 Cloud Run 호스트명을 반드시 주입.
    */
   allowedHosts?: string[]
+  /** auth pipeline 선택. dev → X-Dev-User-Id stub. oauth → Bearer + RS256 verify (env로 결정). */
+  authMode?: AuthMode
+  /** token `aud` 비교에 사용하는 본 server canonical URI + RFC 9728 `resource`. */
+  canonicalUri?: string
+  /** AS root URL — RFC 9728 `authorization_servers` 항목. */
+  issuer?: string
+}
+
+// dev mode은 sync extractDevAuth를 promise로 감싸 동일 인터페이스로 통일.
+const selectExtractor = (mode: AuthMode): AuthExtractor =>
+  mode === 'dev' ? async (headers) => extractDevAuth(headers) : extractOAuthAuth
+
+// RFC 6750 §3.1 challenge. error/error_description 없는 형태는 단순 401 (token 누락 시 표준).
+const buildWwwAuthenticate = (
+  canonicalUri: string | undefined,
+  metadataUrl: string | undefined,
+  challenge?: { error: string; description: string },
+): string => {
+  const parts: string[] = []
+  if (canonicalUri !== undefined) parts.push(`realm="${canonicalUri}"`)
+  if (metadataUrl !== undefined) parts.push(`resource_metadata="${metadataUrl}"`)
+  if (challenge !== undefined) {
+    parts.push(`error="${challenge.error}"`)
+    parts.push(`error_description="${challenge.description.replace(/"/g, '')}"`)
+  }
+  return parts.length > 0 ? `Bearer ${parts.join(', ')}` : 'Bearer'
+}
+
+const metadataUrlFrom = (canonicalUri: string | undefined): string | undefined => {
+  if (canonicalUri === undefined) return undefined
+  try {
+    const url = new URL(canonicalUri)
+    return `${url.protocol}//${url.host}${PROTECTED_RESOURCE_METADATA_PATH}`
+  } catch {
+    return undefined
+  }
 }
 
 // Stateless: spec/SDK가 권장하는 production 패턴 (SEP-1442 방향).
@@ -49,17 +105,41 @@ const handleMcpPost = async (
   req: AuthedRequest,
   res: ServerResponse,
   options: HttpServerOptions,
+  extractAuth: AuthExtractor,
 ): Promise<void> => {
+  const metadataUrl = metadataUrlFrom(options.canonicalUri)
   try {
-    const auth = extractDevAuth(req.headers)
+    const auth = await extractAuth(req.headers)
     req.auth = {
-      token: 'dev',
-      clientId: 'dev',
-      scopes: ['read:calendar', 'write:calendar'],
-      extra: { userId: auth.userId },
+      token: 'dev', // SDK requires non-empty; verified upstream via extractor
+      clientId: 'mcp',
+      scopes: [...auth.scopes],
+      extra: { userId: auth.userId, scopes: auth.scopes },
     }
   } catch (e) {
+    if (e instanceof OAuthTokenError) {
+      res.setHeader(
+        'WWW-Authenticate',
+        buildWwwAuthenticate(options.canonicalUri, metadataUrl, {
+          error: 'invalid_token',
+          description: `${e.reason}: ${e.message}`,
+        }),
+      )
+      writeJson(res, 401, {
+        error: 'unauthorized',
+        reason: e.reason,
+        message: e.message,
+      })
+      return
+    }
     if (e instanceof AuthRequiredError) {
+      // token 누락은 RFC 6750 §3 권고 — error code 없이 challenge만.
+      // 형식 오류(non-Bearer 등)는 invalid_request로 분류 — 본 ticket은 단순화 위해
+      // AuthRequiredError 전부 token-absent로 처리 (LLM 클라가 발견 흐름 동일).
+      res.setHeader(
+        'WWW-Authenticate',
+        buildWwwAuthenticate(options.canonicalUri, metadataUrl),
+      )
       writeJson(res, 401, { error: 'unauthorized', message: e.message })
       return
     }
@@ -83,12 +163,34 @@ const handleMcpPost = async (
   await transport.handleRequest(req, res)
 }
 
-export const createHttpServer = (options: HttpServerOptions = {}): HttpServer =>
-  http.createServer((req, res) => {
+const writeProtectedResourceMetadata = (
+  res: ServerResponse,
+  options: HttpServerOptions,
+): void => {
+  if (options.canonicalUri === undefined || options.issuer === undefined) {
+    writeJson(res, 404, { error: 'not_found' })
+    return
+  }
+  writeJson(res, 200, {
+    resource: options.canonicalUri,
+    authorization_servers: [options.issuer],
+    bearer_methods_supported: ['header'],
+    scopes_supported: [...SUPPORTED_SCOPES],
+  })
+}
+
+export const createHttpServer = (options: HttpServerOptions = {}): HttpServer => {
+  const mode = options.authMode ?? 'oauth'
+  const extractAuth = selectExtractor(mode)
+  return http.createServer((req, res) => {
     const pathname = parsePathname(req)
 
     if (req.method === 'GET' && pathname === '/health') {
       writeJson(res, 200, { status: 'ok' })
+      return
+    }
+    if (req.method === 'GET' && pathname === PROTECTED_RESOURCE_METADATA_PATH) {
+      writeProtectedResourceMetadata(res, options)
       return
     }
     if (pathname === '/mcp' || pathname === '/mcp/') {
@@ -97,7 +199,7 @@ export const createHttpServer = (options: HttpServerOptions = {}): HttpServer =>
         writeMethodNotAllowed(res, 'POST')
         return
       }
-      void handleMcpPost(req as AuthedRequest, res, options).catch((e: unknown) => {
+      void handleMcpPost(req as AuthedRequest, res, options, extractAuth).catch((e: unknown) => {
         if (!res.headersSent) {
           const message = e instanceof Error ? e.message : String(e)
           writeJson(res, 500, { error: 'internal_error', message })
@@ -107,25 +209,42 @@ export const createHttpServer = (options: HttpServerOptions = {}): HttpServer =>
     }
     writeJson(res, 404, { error: 'not_found' })
   })
+}
 
 const start = async (): Promise<void> => {
   const port = Number(process.env['PORT'] ?? 3000)
   const allowedHosts = parseAllowedHosts(process.env['ALLOWED_HOSTS'])
+  const authMode = resolveAuthMode(process.env['AUTH_MODE'])
+  const canonicalUri = process.env['MCP_CANONICAL_URI']
+  const issuer = process.env['MCP_OAUTH_ISSUER']
 
-  if (process.env['NODE_ENV'] === 'production') {
+  if (authMode === 'dev') {
     console.warn(
-      '[warn] X-Dev-User-Id auth is dev-only — replace with OAuth before exposing externally',
+      '[warn] AUTH_MODE=dev — X-Dev-User-Id stub auth is for local development only. Do not deploy publicly.',
     )
-    if (allowedHosts === undefined) {
+  } else {
+    if (canonicalUri === undefined || canonicalUri === '') {
       console.warn(
-        '[warn] ALLOWED_HOSTS unset in production — DNS rebinding protection disabled',
+        '[warn] AUTH_MODE=oauth but MCP_CANONICAL_URI unset — token `aud` validation will fail at first request',
+      )
+    }
+    if (issuer === undefined || issuer === '') {
+      console.warn(
+        '[warn] AUTH_MODE=oauth but MCP_OAUTH_ISSUER unset — token `iss` validation + JWKS fetch will fail at first request',
       )
     }
   }
+  if (process.env['NODE_ENV'] === 'production' && allowedHosts === undefined) {
+    console.warn(
+      '[warn] ALLOWED_HOSTS unset in production — DNS rebinding protection disabled',
+    )
+  }
 
-  const httpServer = createHttpServer({ allowedHosts })
+  const httpServer = createHttpServer({ allowedHosts, authMode, canonicalUri, issuer })
   await new Promise<void>((resolve) => httpServer.listen(port, resolve))
-  console.log(`TodoCalendar MCP listening on :${port} (POST /mcp, GET /health) — stateless`)
+  console.log(
+    `TodoCalendar MCP listening on :${port} (POST /mcp, GET /health, GET ${PROTECTED_RESOURCE_METADATA_PATH}) — stateless, auth=${authMode}`,
+  )
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     console.log(`Received ${signal} — shutting down`)
