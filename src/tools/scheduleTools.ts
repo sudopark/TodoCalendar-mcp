@@ -226,3 +226,66 @@ All timestamps are Unix epoch seconds (UTC).`,
     }
   },
 }
+
+const replaceScheduleOccurrenceInput = z
+  .object({
+    schedule_id: z.string().min(1).describe('UUID of the origin (repeating) schedule.'),
+    new: scheduleInputSchema.describe(
+      'Replacement one-off schedule payload (creates a new schedule for the skipped slot). Same shape as create_schedule body.',
+    ),
+    exclude_repeatings: z
+      .number()
+      .describe(
+        `Timestamp (${TS_SEC}) of the occurrence to exclude on the origin. The origin's repeating continues, this single slot is excluded.`,
+      ),
+  })
+  .describe(
+    'Body for replacing a single occurrence: creates a new schedule AND excludes that occurrence from the origin in one transaction.',
+  )
+
+type ReplaceScheduleOccurrenceInput = z.infer<typeof replaceScheduleOccurrenceInput>
+
+const replaceScheduleOccurrenceOutput = z
+  .object({
+    updated_origin: scheduleSchema.describe(
+      'The origin (repeating) schedule with the excluded occurrence added to `exclude_repeatings`.',
+    ),
+    new_schedule: scheduleSchema.describe('The newly created one-off replacement schedule.'),
+  })
+  .describe('Result of replace_schedule_occurrence.')
+
+type ReplaceScheduleOccurrenceOutput = z.infer<typeof replaceScheduleOccurrenceOutput>
+
+export const replaceScheduleOccurrence: ToolDefinition<
+  ReplaceScheduleOccurrenceInput,
+  ReplaceScheduleOccurrenceOutput
+> = {
+  name: 'replace_schedule_occurrence',
+  description: `\
+Replace a single occurrence of a repeating schedule with a one-off schedule. The origin's recurrence continues for all other occurrences; only this slot is replaced. Returns both the updated origin and the new schedule.
+
+Decision guide for the agent:
+  - Use this when the user wants to *replace* one occurrence (different name/time/details) while keeping the rest of the recurrence.
+  - To merely cancel/skip an occurrence without a replacement, use exclude_schedule_occurrence.
+  - To cut the recurrence at a point and start a new series from there, use branch_schedule_repeating.
+
+The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC).`,
+  inputSchema: replaceScheduleOccurrenceInput,
+  outputSchema: replaceScheduleOccurrenceOutput,
+  execute: async (
+    auth: Auth,
+    args: unknown,
+  ): Promise<ReplaceScheduleOccurrenceOutput> => {
+    const { schedule_id, ...body } = replaceScheduleOccurrenceInput.parse(args)
+    try {
+      return await callOpenApi<ReplaceScheduleOccurrenceOutput>(
+        auth,
+        'POST',
+        `/v2/open/schedules/${encodeURIComponent(schedule_id)}/exclude`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
