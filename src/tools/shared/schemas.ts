@@ -136,3 +136,9 @@ export const eventDetailSchema = z
     memo: z.string().nullish(),
   })
   .describe('Optional metadata attached to a todo or schedule.')
+
+export const statusOkSchema = z
+  .object({
+    status: z.string().describe('Operation status string, typically "ok".'),
+  })
+  .describe('Generic success envelope returned by mutation endpoints that do not echo the entity.')
