@@ -43,16 +43,19 @@ vi.mock('../../src/openapi/client.js', () => ({
 
 const { createMcpServer } = await import('../../src/mcp/server.js')
 
-const auth: Auth = { userId: 'u-test' }
+const auth: Auth = { userId: 'u-test', scopes: ['read:calendar', 'write:calendar'] }
 
 interface WireOptions {
   /** true면 createMcpServer의 default resolveAuth 사용 (InMemoryTransport 환경 → AuthInvariantError 시뮬레이션) */
   useDefaultResolveAuth?: boolean
+  /** override the resolved auth (defaults to full-scope `auth`) */
+  auth?: Auth
 }
 
 const wireServer = async (options: WireOptions = {}) => {
+  const resolved = options.auth ?? auth
   const server = createMcpServer(
-    options.useDefaultResolveAuth === true ? {} : { resolveAuth: () => auth },
+    options.useDefaultResolveAuth === true ? {} : { resolveAuth: () => resolved },
   )
   const client = new Client({ name: 'test-client', version: '0.0.0' })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -258,6 +261,92 @@ describe('mcp server — tools/call', () => {
 
     expect(result.isError).toBe(true)
     expect(result._meta).toEqual({ code: 'InsufficientScope', status: 403 })
+  })
+
+  describe('scope enforce (#23 §3)', () => {
+    it('read-only scope로 read tool — 통과', async () => {
+      const { client } = await wireServer({
+        auth: { userId: 'u-test', scopes: ['read:calendar'] },
+      })
+
+      const result = await client.callTool({ name: 'get_tags', arguments: {} })
+
+      expect(result.isError).toBeFalsy()
+      expect(openApiSpy.callCount).toBe(1)
+    })
+
+    it('read-only scope로 write tool — 403 InsufficientScope, openApi 미호출', async () => {
+      const { client } = await wireServer({
+        auth: { userId: 'u-test', scopes: ['read:calendar'] },
+      })
+
+      const result = await client.callTool({
+        name: 'create_tag',
+        arguments: { name: 'work', color_hex: '#fff' },
+      })
+
+      expect(result.isError).toBe(true)
+      expect(result._meta).toEqual({ code: 'InsufficientScope', status: 403 })
+      expect(openApiSpy.callCount).toBe(0)
+    })
+
+    it('빈 scope — read tool도 403', async () => {
+      const { client } = await wireServer({
+        auth: { userId: 'u-test', scopes: [] },
+      })
+
+      const result = await client.callTool({ name: 'get_tags', arguments: {} })
+
+      expect(result.isError).toBe(true)
+      expect(result._meta).toEqual({ code: 'InsufficientScope', status: 403 })
+    })
+
+    it('write scope만 있을 때 — read tool 호출은 403 (정확 일치)', async () => {
+      const { client } = await wireServer({
+        auth: { userId: 'u-test', scopes: ['write:calendar'] },
+      })
+
+      const result = await client.callTool({ name: 'get_tags', arguments: {} })
+
+      expect(result.isError).toBe(true)
+      expect(result._meta).toEqual({ code: 'InsufficientScope', status: 403 })
+    })
+
+    it('write scope로 write tool — 통과', async () => {
+      openApiSpy.responsePayload = {
+        uuid: 'tag-x',
+        userId: 'u-test',
+        name: 'work',
+        color_hex: '#fff',
+      }
+      const { client } = await wireServer({
+        auth: { userId: 'u-test', scopes: ['write:calendar'] },
+      })
+
+      const result = await client.callTool({
+        name: 'create_tag',
+        arguments: { name: 'work', color_hex: '#fff' },
+      })
+
+      expect(result.isError).toBeFalsy()
+      expect(openApiSpy.callCount).toBe(1)
+    })
+
+    it('InsufficientScope 메시지 — 누락된 scope 명시', async () => {
+      const { client } = await wireServer({
+        auth: { userId: 'u-test', scopes: ['read:calendar'] },
+      })
+
+      const result = await client.callTool({
+        name: 'create_tag',
+        arguments: { name: 'work', color_hex: '#fff' },
+      })
+
+      const text = (result.content as { type: string; text: string }[]).find(
+        (c) => c.type === 'text',
+      )?.text
+      expect(text).toMatch(/write:calendar/)
+    })
   })
 
   it('AuthInvariantError — middleware 누락 시 JSON-RPC 에러로 bubble (CallToolResult 아님)', async () => {

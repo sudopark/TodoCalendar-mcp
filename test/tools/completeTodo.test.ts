@@ -36,7 +36,7 @@ vi.mock('../../src/openapi/client.js', () => ({
 
 const { completeTodo } = await import('../../src/tools/todoTools.js')
 
-const auth: Auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
 const originTodo = {
   uuid: 't-1',

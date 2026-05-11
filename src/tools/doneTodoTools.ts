@@ -50,6 +50,7 @@ type GetDoneTodosOutput = z.infer<typeof getDoneTodosOutput>
 
 export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput> = {
   name: 'get_done_todos',
+  scopes: ['read:calendar'],
   description: `\
 Fetch completed (done) todos for the authenticated user, ordered by completion time (newest first), paginated by cursor.
 
@@ -96,6 +97,7 @@ type UpdateDoneTodoOutput = z.infer<typeof updateDoneTodoOutput>
 
 export const updateDoneTodo: ToolDefinition<UpdateDoneTodoInput, UpdateDoneTodoOutput> = {
   name: 'update_done_todo',
+  scopes: ['write:calendar'],
   description: `\
 Update editable fields of a completed (done) todo: name, event_time, event_tag_id. Returns the updated done todo.
 
@@ -145,6 +147,7 @@ type RevertDoneTodoOutput = z.infer<typeof revertDoneTodoOutput>
 
 export const revertDoneTodo: ToolDefinition<RevertDoneTodoInput, RevertDoneTodoOutput> = {
   name: 'revert_done_todo',
+  scopes: ['write:calendar'],
   description: `\
 Revert a completed (done) todo back to the active list. Returns the new active todo and any carried-over event detail.
 
@@ -181,6 +184,7 @@ type DeleteDoneTodoOutput = z.infer<typeof deleteDoneTodoOutput>
 
 export const deleteDoneTodo: ToolDefinition<DeleteDoneTodoInput, DeleteDoneTodoOutput> = {
   name: 'delete_done_todo',
+  scopes: ['write:calendar'],
   description: `\
 Permanently delete a completed (done) todo record. Returns { status: 'ok' }.
 

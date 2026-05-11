@@ -48,7 +48,7 @@ afterEach(() => {
 
 const { deleteSchedule } = await import('../../src/tools/scheduleTools.js')
 
-const auth: Auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
 beforeEach(() => {
   openApiSpy.lastAuth = null
@@ -130,7 +130,7 @@ describe('delete_schedule — 2단계: 매치되는 토큰 → 실제 DELETE', (
 describe('delete_schedule — confirmToken 거부 케이스', () => {
   it('다른 사용자가 발급받은 토큰 → SubMismatch ToolError', async () => {
     const otherStep1 = (await deleteSchedule.execute(
-      { userId: 'u-attacker' },
+      { userId: 'u-attacker', scopes: ['read:calendar', 'write:calendar'] },
       { schedule_id: 's-1' },
     )) as { confirmToken: string }
 

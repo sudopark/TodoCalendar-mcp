@@ -36,7 +36,7 @@ vi.mock('../../src/openapi/client.js', () => ({
 
 const { setEventDetail } = await import('../../src/tools/eventDetailTools.js')
 
-const auth: Auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
 beforeEach(() => {
   openApiSpy.lastAuth = null

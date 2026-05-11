@@ -68,6 +68,7 @@ const dispatchPath = (input: GetTodosInput): string => {
 
 export const getTodos: ToolDefinition<GetTodosInput, GetTodosOutput> = {
   name: 'get_todos',
+  scopes: ['read:calendar'],
   description: `\
 Fetch todos for the authenticated user.
 
@@ -121,6 +122,7 @@ type CreateTodoOutput = z.infer<typeof createTodoOutput>
 
 export const createTodo: ToolDefinition<CreateTodoInput, CreateTodoOutput> = {
   name: 'create_todo',
+  scopes: ['write:calendar'],
   description: `\
 Create a new todo for the authenticated user. Returns the created todo with its assigned uuid.
 
@@ -168,6 +170,7 @@ type UpdateTodoOutput = z.infer<typeof updateTodoOutput>
 
 export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
   name: 'update_todo',
+  scopes: ['write:calendar'],
   description: `\
 Partially update a todo's fields (PATCH). Returns the full updated todo.
 
@@ -231,6 +234,7 @@ type CompleteTodoOutput = z.infer<typeof completeTodoOutput>
 
 export const completeTodo: ToolDefinition<CompleteTodoInput, CompleteTodoOutput> = {
   name: 'complete_todo',
+  scopes: ['write:calendar'],
   description: `\
 Mark a todo as completed. Returns the new done-todo record. For repeating todos, optionally advance to the next occurrence by passing 'next_event_time' and 'next_repeating_turn'.
 
@@ -285,6 +289,7 @@ type ReplaceTodoOutput = z.infer<typeof replaceTodoOutput>
 
 export const replaceTodo: ToolDefinition<ReplaceTodoInput, ReplaceTodoOutput> = {
   name: 'replace_todo',
+  scopes: ['write:calendar'],
   description: `\
 Replace a repeating todo with a new one, choosing how the origin is treated. Only meaningful for *repeating* todos — for non-repeating todos this would just delete+create and you should use update_todo (PATCH) instead.
 
@@ -336,6 +341,7 @@ type DeleteTodoOutput = z.infer<typeof deleteTodoOutput>
 
 export const deleteTodo: ToolDefinition<DeleteTodoInput, DeleteTodoOutput> = {
   name: 'delete_todo',
+  scopes: ['write:calendar'],
   description: `\
 Permanently delete a todo (full deletion — for non-repeating todos this just removes the record; for repeating todos this removes the ENTIRE series). CONFIRM-gated: the first call does NOT delete — it returns a confirmToken that must be echoed back to actually execute.
 
