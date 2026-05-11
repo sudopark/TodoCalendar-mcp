@@ -87,8 +87,10 @@ export const verifyConfirmToken = (
     )
   }
 
-  const decodedHash = typeof decoded.argsHash === 'string' ? decoded.argsHash : ''
-  if (decodedHash !== computeArgsHash(args)) {
+  if (typeof decoded.argsHash !== 'string') {
+    throw new ConfirmTokenError('Invalid', 'confirm token missing argsHash claim')
+  }
+  if (decoded.argsHash !== computeArgsHash(args)) {
     throw new ConfirmTokenError('ArgsMismatch', 'confirm token args mismatch')
   }
 }

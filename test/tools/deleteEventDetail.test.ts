@@ -154,4 +154,8 @@ describe('delete_event_detail — metadata', () => {
   it('description은 is_done 라우트 분기 가이드 포함', () => {
     expect(deleteEventDetail.description).toMatch(/is_done/i)
   })
+
+  it('description은 done todo 자체 복원은 revert_done_todo를 쓰라고 안내', () => {
+    expect(deleteEventDetail.description).toMatch(/revert_done_todo/i)
+  })
 })

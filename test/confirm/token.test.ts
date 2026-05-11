@@ -149,6 +149,16 @@ describe('verifyConfirmToken — reject', () => {
       expect.objectContaining({ reason: 'SubMismatch' }) as Partial<ConfirmTokenError>,
     )
   })
+
+  it('argsHash claim 누락된 토큰 거부 — Invalid (포맷 깨짐, ArgsMismatch로 묻히지 않음)', () => {
+    const noHashTok = jwt.sign({ tool: 'delete_todo', sub: 'u-1' }, SECRET, {
+      algorithm: 'HS256',
+      expiresIn: 300,
+    })
+    expect(() => verifyConfirmToken(noHashTok, 'delete_todo', { id: 'a' }, 'u-1')).toThrow(
+      expect.objectContaining({ reason: 'Invalid' }) as Partial<ConfirmTokenError>,
+    )
+  })
 })
 
 describe('canonical args hash — edge cases', () => {

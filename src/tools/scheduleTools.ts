@@ -364,7 +364,7 @@ type DeleteScheduleInput = z.infer<typeof deleteScheduleInput>
 const deleteScheduleOutput = z
   .union([confirmRequiredSchema, statusOkSchema])
   .describe(
-    "Either the confirm_required envelope (first call) or {status:'ok'} after the actual deletion. Note: the openAPI returns HTTP 201 (not 200) for schedule delete — the payload shape is still {status:'ok'}.",
+    "Either the confirm_required envelope (first call) or {status:'ok'} after the actual deletion. Note: the openAPI returns HTTP 201 (not 200) for schedule delete — the payload shape is still {status:'ok'}. Any additional fields the openAPI returns are preserved verbatim (raw passthrough).",
   )
 
 type DeleteScheduleOutput = z.infer<typeof deleteScheduleOutput>
@@ -378,7 +378,11 @@ Two-step flow:
   1. Call with { schedule_id }. Response is { status: 'confirm_required', message, confirmToken, action, target }. No backend mutation has happened.
   2. Surface 'message' to the end user. If they approve, re-call with { schedule_id, confirmToken } using the SAME schedule_id. The token expires in 5 minutes and is bound to this user + tool + args.
 
-For repeating schedules, this removes the ENTIRE series. To skip a single occurrence while keeping the series, use exclude_schedule_occurrence instead. To replace a single occurrence with a one-off, use replace_schedule_occurrence.`,
+Decision guide for repeating schedules (pick the smallest scope that matches the user's intent):
+  - Skip a single occurrence (no replacement, series continues): exclude_schedule_occurrence.
+  - Replace a single occurrence with a one-off (series continues): replace_schedule_occurrence.
+  - Switch the recurrence rule itself from a certain point forward (e.g. daily → weekly starting next Monday): branch_schedule_repeating.
+  - Remove the entire series outright: this tool (delete_schedule).`,
   inputSchema: deleteScheduleInput,
   outputSchema: deleteScheduleOutput,
   execute: async (auth: Auth, args: unknown): Promise<DeleteScheduleOutput> => {

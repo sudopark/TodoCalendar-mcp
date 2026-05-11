@@ -137,8 +137,12 @@ export const eventDetailSchema = z
   })
   .describe('Optional metadata attached to a todo or schedule.')
 
+// §6 raw passthrough — outputSchema는 LLM에 노출되는 description 채널일 뿐, runtime parse하지 않는다.
+// openAPI가 추가 필드를 돌려주더라도 그대로 흘러가야 round-trip·감사로그 무손실 약속이 유지됨.
 export const statusOkSchema = z
   .object({
     status: z.string().describe('Operation status string, typically "ok".'),
   })
-  .describe('Generic success envelope returned by mutation endpoints that do not echo the entity.')
+  .describe(
+    'Generic success envelope returned by mutation endpoints that do not echo the entity. Any additional fields the openAPI returns are preserved verbatim (raw passthrough).',
+  )
