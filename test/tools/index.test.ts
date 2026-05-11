@@ -4,15 +4,19 @@ import { tools } from '../../src/tools/index.js'
 describe('tools registry', () => {
   it('등록된 tool 모두 — 키는 각 tool의 name과 일치', () => {
     expect(Object.keys(tools).sort()).toEqual([
+      'branch_schedule_repeating',
       'complete_todo',
       'create_schedule',
       'create_tag',
       'create_todo',
+      'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
       'get_schedules',
       'get_tags',
       'get_todos',
+      'replace_schedule_occurrence',
+      'replace_todo',
       'revert_done_todo',
       'set_event_detail',
       'update_done_todo',
