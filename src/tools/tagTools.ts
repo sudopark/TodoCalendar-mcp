@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
-import { eventTagSchema } from './shared/schemas.js'
+import { eventTagSchema, statusOkSchema } from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const getTagsInput = z.object({}).describe('No parameters — returns all tags for the caller.')
@@ -96,6 +96,40 @@ export const updateTag: ToolDefinition<UpdateTagInput, UpdateTagOutput> = {
         'PUT',
         `/v2/open/tags/${encodeURIComponent(tag_id)}`,
         body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const deleteTagInput = z
+  .object({
+    tag_id: z.string().min(1).describe('UUID of the tag to delete.'),
+  })
+  .describe(
+    'Delete a single event tag by id. The openAPI exposes only single-target deletion — there is no bulk variant that also deletes events carrying the tag.',
+  )
+
+type DeleteTagInput = z.infer<typeof deleteTagInput>
+
+const deleteTagOutput = statusOkSchema
+
+type DeleteTagOutput = z.infer<typeof deleteTagOutput>
+
+export const deleteTag: ToolDefinition<DeleteTagInput, DeleteTagOutput> = {
+  name: 'delete_tag',
+  description:
+    "Delete an event tag belonging to the authenticated user. Returns { status: 'ok' }. Events that referenced the tag are NOT deleted — only the tag itself is removed.",
+  inputSchema: deleteTagInput,
+  outputSchema: deleteTagOutput,
+  execute: async (auth: Auth, args: unknown): Promise<DeleteTagOutput> => {
+    const { tag_id } = deleteTagInput.parse(args)
+    try {
+      return await callOpenApi<DeleteTagOutput>(
+        auth,
+        'DELETE',
+        `/v2/open/tags/${encodeURIComponent(tag_id)}`,
       )
     } catch (e) {
       return wrapOpenApiError(e)
