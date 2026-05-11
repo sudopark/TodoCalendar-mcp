@@ -104,12 +104,37 @@ describe('verifyOAuthToken — accept', () => {
     const token = signToken(kpA, { sub: 'u-42', scope: 'read:calendar write:calendar' })
 
     const auth = await verifyOAuthToken(token)
-    expect(auth).toEqual({
+    expect(auth).toMatchObject({
       userId: 'u-42',
       scopes: ['read:calendar', 'write:calendar'],
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledWith(JWKS_URL)
+    // 두 번째 인자: AbortSignal.timeout 옵션
+    expect(fetchMock).toHaveBeenCalledWith(JWKS_URL, expect.any(Object))
+  })
+
+  it('client_id 있으면 OAuthAuth.clientId 에 매핑', async () => {
+    vi.stubGlobal('fetch', makeFetchMock(() => ({ body: jwksBodyFor([kpA]) })))
+    const token = signToken(kpA, { sub: 'u-1', extraPayload: { client_id: 'cli-x' } })
+    const auth = await verifyOAuthToken(token)
+    expect(auth.clientId).toBe('cli-x')
+  })
+
+  it('client_id 누락 → clientId undefined', async () => {
+    vi.stubGlobal('fetch', makeFetchMock(() => ({ body: jwksBodyFor([kpA]) })))
+    const token = signToken(kpA, { sub: 'u-1' })
+    const auth = await verifyOAuthToken(token)
+    expect(auth.clientId).toBeUndefined()
+  })
+
+  it('aud array에 expectedAudience 포함 → 통과 (RFC 7519 §4.1.3 / RFC 8707 array form)', async () => {
+    vi.stubGlobal('fetch', makeFetchMock(() => ({ body: jwksBodyFor([kpA]) })))
+    const token = signToken(kpA, {
+      sub: 'u-1',
+      aud: [AUDIENCE, 'https://other.example.com/api'],
+    })
+    const auth = await verifyOAuthToken(token)
+    expect(auth.userId).toBe('u-1')
   })
 
   it('공백 구분 scope string을 split', async () => {
@@ -161,9 +186,12 @@ describe('verifyOAuthToken — reject', () => {
     await expect(verifyOAuthToken(token)).rejects.toMatchObject({ reason: 'AudienceMismatch' })
   })
 
-  it('aud가 배열 → AudienceMismatch (single string 만 인정)', async () => {
+  it('aud array에 expectedAudience 미포함 → AudienceMismatch', async () => {
     vi.stubGlobal('fetch', makeFetchMock(() => ({ body: jwksBodyFor([kpA]) })))
-    const token = signToken(kpA, { sub: 'u-1', aud: [AUDIENCE] })
+    const token = signToken(kpA, {
+      sub: 'u-1',
+      aud: ['https://other-1.example.com/api', 'https://other-2.example.com/api'],
+    })
     await expect(verifyOAuthToken(token)).rejects.toMatchObject({ reason: 'AudienceMismatch' })
   })
 
@@ -335,7 +363,7 @@ describe('JWKS cache', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const token = signToken(kpA, { sub: 'u-1', expiresIn: 60 * 60 })
+    const token = signToken(kpA, { sub: 'u-1', expiresIn: 60 * 60 * 2 })
     await verifyOAuthToken(token)
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
@@ -344,6 +372,97 @@ describe('JWKS cache', () => {
     const auth = await verifyOAuthToken(token)
     expect(auth.userId).toBe('u-1')
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('stale 캐시 max-age 초과 + fetch 실패 → Invalid (revoked key 보호)', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+
+    let callCount = 0
+    const fetchMock = vi.fn(async () => {
+      callCount += 1
+      if (callCount === 1) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => jwksBodyFor([kpA]),
+        } as Response
+      }
+      throw new Error('network down')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const token = signToken(kpA, { sub: 'u-1', expiresIn: 60 * 60 * 4 })
+    await verifyOAuthToken(token)
+
+    // TTL(5분) + STALE_MAX(30분) = 35분 초과 → stale fallback 차단
+    vi.setSystemTime(new Date('2026-01-01T00:35:01Z'))
+    await expect(verifyOAuthToken(token)).rejects.toMatchObject({ reason: 'Invalid' })
+  })
+
+  it('in-flight dedupe: 동시 호출은 fetchJwks 한 번만 발사', async () => {
+    let callCount = 0
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          callCount += 1
+          setTimeout(
+            () =>
+              resolve({
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                json: async () => jwksBodyFor([kpA]),
+              } as Response),
+            10,
+          )
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const tokenA = signToken(kpA, { sub: 'u-1' })
+    const tokenB = signToken(kpA, { sub: 'u-2' })
+    const [a, b] = await Promise.all([verifyOAuthToken(tokenA), verifyOAuthToken(tokenB)])
+    expect(a.userId).toBe('u-1')
+    expect(b.userId).toBe('u-2')
+    expect(callCount).toBe(1)
+  })
+
+  it('clockTolerance — exp 직후 ~30초 안의 token은 통과 (시계 드리프트 leniency)', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    vi.stubGlobal('fetch', makeFetchMock(() => ({ body: jwksBodyFor([kpA]) })))
+    const token = signToken(kpA, { sub: 'u-1', expiresIn: 60 * 30 })
+
+    // exp 직후 + 20초 — clockTolerance 30초 안이라 아직 valid
+    vi.setSystemTime(new Date('2026-01-01T00:30:20Z'))
+    const auth = await verifyOAuthToken(token)
+    expect(auth.userId).toBe('u-1')
+
+    // exp + 31초 — leniency 넘어서면 Expired
+    vi.setSystemTime(new Date('2026-01-01T00:30:31Z'))
+    await expect(verifyOAuthToken(token)).rejects.toMatchObject({ reason: 'Expired' })
+  })
+})
+
+describe('__resetJwksCacheForTest — test-only guard', () => {
+  it('NODE_ENV !== test + VITEST 없으면 throw (prod 노출 방지)', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('VITEST', '')
+    expect(() => __resetJwksCacheForTest()).toThrow(/tests only/)
+  })
+
+  it('NODE_ENV=test 면 통과', () => {
+    vi.stubEnv('NODE_ENV', 'test')
+    vi.stubEnv('VITEST', '')
+    expect(() => __resetJwksCacheForTest()).not.toThrow()
+  })
+
+  it('VITEST flag 있으면 통과', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('VITEST', 'true')
+    expect(() => __resetJwksCacheForTest()).not.toThrow()
   })
 })
 
