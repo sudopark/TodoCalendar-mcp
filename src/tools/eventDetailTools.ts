@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
-import { eventDetailSchema } from './shared/schemas.js'
+import { eventDetailSchema, statusOkSchema } from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const getEventDetailsInput = z
@@ -96,6 +96,51 @@ The active vs done routing is governed by the 'is_done' input flag — set it ba
       : `/v2/open/event_details/${encodeURIComponent(event_id)}`
     try {
       return await callOpenApi<SetEventDetailOutput>(auth, 'PUT', path, detail)
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const deleteEventDetailInput = z
+  .object({
+    event_id: z
+      .string()
+      .min(1)
+      .describe(
+        'UUID of the todo, schedule, or done-todo whose detail metadata should be deleted. Empty string is rejected.',
+      ),
+    is_done: z
+      .boolean()
+      .describe(
+        "Set to true when event_id refers to a done-todo (came from get_done_todos), false for active todos and schedules. Routes the request to the matching collection — the server doesn't auto-detect.",
+      ),
+  })
+  .describe('Remove the detail metadata attached to one event. The parent event (todo / schedule / done-todo) is NOT deleted.')
+
+type DeleteEventDetailInput = z.infer<typeof deleteEventDetailInput>
+
+const deleteEventDetailOutput = statusOkSchema
+
+type DeleteEventDetailOutput = z.infer<typeof deleteEventDetailOutput>
+
+export const deleteEventDetail: ToolDefinition<DeleteEventDetailInput, DeleteEventDetailOutput> = {
+  name: 'delete_event_detail',
+  description: `\
+Delete the detail metadata (place / url / memo) attached to a specific event. Returns { status: 'ok' }.
+
+This removes only the detail record — the parent event (todo / schedule / done-todo) remains. To delete the parent event itself, use delete_todo / delete_schedule / delete_done_todo.
+
+The active vs done routing is governed by the 'is_done' input flag — set it based on which list the event came from (active todos/schedules → false; done todos → true).`,
+  inputSchema: deleteEventDetailInput,
+  outputSchema: deleteEventDetailOutput,
+  execute: async (auth: Auth, args: unknown): Promise<DeleteEventDetailOutput> => {
+    const { event_id, is_done } = deleteEventDetailInput.parse(args)
+    const path = is_done
+      ? `/v2/open/event_details/done/${encodeURIComponent(event_id)}`
+      : `/v2/open/event_details/${encodeURIComponent(event_id)}`
+    try {
+      return await callOpenApi<DeleteEventDetailOutput>(auth, 'DELETE', path)
     } catch (e) {
       return wrapOpenApiError(e)
     }

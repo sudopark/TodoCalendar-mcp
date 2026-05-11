@@ -1,5 +1,5 @@
 import { deleteDoneTodo, getDoneTodos, revertDoneTodo, updateDoneTodo } from './doneTodoTools.js'
-import { getEventDetails, setEventDetail } from './eventDetailTools.js'
+import { deleteEventDetail, getEventDetails, setEventDetail } from './eventDetailTools.js'
 import {
   branchScheduleRepeating,
   createSchedule,
@@ -35,6 +35,7 @@ export const tools = buildRegistry([
   createTag as AnyToolDefinition,
   createTodo as AnyToolDefinition,
   deleteDoneTodo as AnyToolDefinition,
+  deleteEventDetail as AnyToolDefinition,
   deleteTag as AnyToolDefinition,
   excludeScheduleOccurrence as AnyToolDefinition,
   getDoneTodos as AnyToolDefinition,
@@ -59,6 +60,7 @@ export {
   createTag,
   createTodo,
   deleteDoneTodo,
+  deleteEventDetail,
   deleteTag,
   excludeScheduleOccurrence,
   getDoneTodos,
