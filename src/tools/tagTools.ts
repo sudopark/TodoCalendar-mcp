@@ -15,6 +15,7 @@ type GetTagsOutput = z.infer<typeof getTagsOutput>
 
 export const getTags: ToolDefinition<GetTagsInput, GetTagsOutput> = {
   name: 'get_tags',
+  scopes: ['read:calendar'],
   description:
     'Fetch all event tags (categories) belonging to the authenticated user. Tags are reusable labels assigned to todos and schedules.',
   inputSchema: getTagsInput,
@@ -49,6 +50,7 @@ type CreateTagOutput = z.infer<typeof createTagOutput>
 
 export const createTag: ToolDefinition<CreateTagInput, CreateTagOutput> = {
   name: 'create_tag',
+  scopes: ['write:calendar'],
   description:
     'Create a new event tag (category) for the authenticated user. Returns the created tag with its assigned uuid.',
   inputSchema: createTagInput,
@@ -84,6 +86,7 @@ type UpdateTagOutput = z.infer<typeof updateTagOutput>
 
 export const updateTag: ToolDefinition<UpdateTagInput, UpdateTagOutput> = {
   name: 'update_tag',
+  scopes: ['write:calendar'],
   description:
     "Update an event tag's name and/or color. The tag's uuid stays the same. Names must be unique among the caller's tags.",
   inputSchema: updateTagInput,
@@ -119,6 +122,7 @@ type DeleteTagOutput = z.infer<typeof deleteTagOutput>
 
 export const deleteTag: ToolDefinition<DeleteTagInput, DeleteTagOutput> = {
   name: 'delete_tag',
+  scopes: ['write:calendar'],
   description:
     "Delete an event tag belonging to the authenticated user. Returns { status: 'ok' }. Events that referenced the tag are NOT deleted — only the tag itself is removed.",
   inputSchema: deleteTagInput,

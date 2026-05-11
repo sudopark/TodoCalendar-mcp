@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe('signUserToken', () => {
   it('payload — sub + scope claim 포함, HS256 서명', () => {
-    const token = signUserToken({ userId: 'user-1' })
+    const token = signUserToken({ userId: 'user-1', scopes: ['read:calendar', 'write:calendar'] })
     const decoded = jwt.verify(token, SIGNING, { algorithms: ['HS256'] }) as jwt.JwtPayload
     expect(decoded.sub).toBe('user-1')
     expect(decoded.scope).toEqual(['read:calendar', 'write:calendar'])
@@ -53,14 +53,14 @@ describe('signUserToken', () => {
 
   it('SIGNING_SECRET 누락 시 throw', () => {
     vi.stubEnv('SIGNING_SECRET', '')
-    expect(() => signUserToken({ userId: 'u' })).toThrow(/SIGNING_SECRET/)
+    expect(() => signUserToken({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] })).toThrow(/SIGNING_SECRET/)
   })
 })
 
 describe('callOpenApi — 헤더 주입', () => {
   it('Authorization + x-open-user-token 동시 주입', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk({ ok: true }))
-    await callOpenApi({ userId: 'u' }, 'GET', '/v2/open/todos')
+    await callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/v2/open/todos')
 
     const headers = getHeaders(fetchSpy)
     expect(headers.Authorization).toBe(`Bearer ${PAT}`)
@@ -75,7 +75,7 @@ describe('callOpenApi — 헤더 주입', () => {
 
   it('GET — body / Content-Type 없음', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
-    await callOpenApi({ userId: 'u' }, 'GET', '/v2/open/todos')
+    await callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/v2/open/todos')
 
     const [, init] = getCall(fetchSpy)
     expect(init.body).toBeUndefined()
@@ -84,7 +84,7 @@ describe('callOpenApi — 헤더 주입', () => {
 
   it('POST + body — JSON 직렬화 + Content-Type 주입', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
-    await callOpenApi({ userId: 'u' }, 'POST', '/v2/open/todos', { name: 'x' })
+    await callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'POST', '/v2/open/todos', { name: 'x' })
 
     const [, init] = getCall(fetchSpy)
     expect(init.body).toBe(JSON.stringify({ name: 'x' }))
@@ -96,14 +96,14 @@ describe('callOpenApi — URL 조립', () => {
   it('base URL 트레일링 슬래시 정규화', async () => {
     vi.stubEnv('OPENAPI_BASE_URL', `${BASE}/`)
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
-    await callOpenApi({ userId: 'u' }, 'GET', '/v2/open/todos')
+    await callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/v2/open/todos')
 
     expect(getCall(fetchSpy)[0]).toBe(`${BASE}/v2/open/todos`)
   })
 
   it('path 선행 슬래시 누락도 허용', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk())
-    await callOpenApi({ userId: 'u' }, 'GET', 'v2/open/todos')
+    await callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', 'v2/open/todos')
 
     expect(getCall(fetchSpy)[0]).toBe(`${BASE}/v2/open/todos`)
   })
@@ -113,7 +113,7 @@ describe('callOpenApi — 응답 처리', () => {
   it('성공 응답 — JSON 파싱해서 반환', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOk({ id: 'a', name: 'x' }))
     const res = await callOpenApi<{ id: string; name: string }>(
-      { userId: 'u' },
+      { userId: 'u', scopes: ['read:calendar', 'write:calendar'] },
       'GET',
       '/v2/open/todos/a',
     )
@@ -126,7 +126,7 @@ describe('callOpenApi — 응답 처리', () => {
         status: 400,
       }),
     )
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toBeInstanceOf(
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toBeInstanceOf(
       InvalidParameterError,
     )
   })
@@ -138,7 +138,7 @@ describe('callOpenApi — 응답 처리', () => {
         { status: 403 },
       ),
     )
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toBeInstanceOf(
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toBeInstanceOf(
       InsufficientScopeError,
     )
   })
@@ -149,14 +149,14 @@ describe('callOpenApi — 응답 처리', () => {
         status: 404,
       }),
     )
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toBeInstanceOf(NotFoundError)
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toBeInstanceOf(NotFoundError)
   })
 
   it('비표준 4xx body (HTML 등) — OpenApiError 폴백', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('<html>500</html>', { status: 502 }),
     )
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toMatchObject({
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toMatchObject({
       status: 502,
       code: 'Unknown',
     })
@@ -164,14 +164,14 @@ describe('callOpenApi — 응답 처리', () => {
 
   it('빈 body 4xx — OpenApiError 폴백', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 500 }))
-    const err = await callOpenApi({ userId: 'u' }, 'GET', '/x').catch((e: unknown) => e)
+    const err = await callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(OpenApiError)
     expect((err as OpenApiError).status).toBe(500)
   })
 
   it('2xx + 빈 body — EmptyBody 에러로 throw (success body invariant 강제)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 200 }))
-    await expect(callOpenApi({ userId: 'u' }, 'DELETE', '/x')).rejects.toMatchObject({
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'DELETE', '/x')).rejects.toMatchObject({
       status: 200,
       code: 'EmptyBody',
     })
@@ -180,23 +180,23 @@ describe('callOpenApi — 응답 처리', () => {
   it('네트워크 에러 (fetch reject) — raw error 그대로 propagate', async () => {
     const networkErr = new TypeError('fetch failed')
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(networkErr)
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toBe(networkErr)
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toBe(networkErr)
   })
 })
 
 describe('callOpenApi — env 검증', () => {
   it('OPENAPI_BASE_URL 누락 시 throw', async () => {
     vi.stubEnv('OPENAPI_BASE_URL', '')
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toThrow(/OPENAPI_BASE_URL/)
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toThrow(/OPENAPI_BASE_URL/)
   })
 
   it('OPENAPI_PAT_MCP 누락 시 throw', async () => {
     vi.stubEnv('OPENAPI_PAT_MCP', '')
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toThrow(/OPENAPI_PAT_MCP/)
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toThrow(/OPENAPI_PAT_MCP/)
   })
 
   it('OPENAPI_PAT_MCP가 mcp_ prefix 아니면 throw', async () => {
     vi.stubEnv('OPENAPI_PAT_MCP', 'wrong_secret')
-    await expect(callOpenApi({ userId: 'u' }, 'GET', '/x')).rejects.toThrow(/mcp_/)
+    await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toThrow(/mcp_/)
   })
 })

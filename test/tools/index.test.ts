@@ -31,14 +31,23 @@ describe('tools registry', () => {
     ])
   })
 
-  it('각 entry는 ToolDefinition 모양 — name·description·schemas·execute', () => {
+  it('각 entry는 ToolDefinition 모양 — name·description·scopes·schemas·execute', () => {
     for (const [key, tool] of Object.entries(tools)) {
       expect(tool.name).toBe(key)
       expect(typeof tool.description).toBe('string')
       expect(tool.description.length).toBeGreaterThan(0)
+      expect(Array.isArray(tool.scopes)).toBe(true)
+      expect(tool.scopes.length).toBeGreaterThan(0)
       expect(tool.inputSchema).toBeDefined()
       expect(tool.outputSchema).toBeDefined()
       expect(typeof tool.execute).toBe('function')
+    }
+  })
+
+  it('scope 매핑 — get_* tool은 read:calendar, 나머지는 write:calendar', () => {
+    for (const [key, tool] of Object.entries(tools)) {
+      const expected = key.startsWith('get_') ? 'read:calendar' : 'write:calendar'
+      expect(tool.scopes).toEqual([expected])
     }
   })
 

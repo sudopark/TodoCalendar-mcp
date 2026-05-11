@@ -36,7 +36,7 @@ vi.mock('../../src/openapi/client.js', () => ({
 
 const { replaceScheduleOccurrence } = await import('../../src/tools/scheduleTools.js')
 
-const auth: Auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
 const newSchedule = {
   name: 'one-off',

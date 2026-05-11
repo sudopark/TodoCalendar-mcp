@@ -29,6 +29,7 @@ type GetEventDetailsOutput = z.infer<typeof getEventDetailsOutput>
 
 export const getEventDetails: ToolDefinition<GetEventDetailsInput, GetEventDetailsOutput> = {
   name: 'get_event_details',
+  scopes: ['read:calendar'],
   description: `\
 Fetch optional detail metadata (place, url, memo) for a specific event.
 
@@ -83,6 +84,7 @@ type SetEventDetailOutput = z.infer<typeof setEventDetailOutput>
 
 export const setEventDetail: ToolDefinition<SetEventDetailInput, SetEventDetailOutput> = {
   name: 'set_event_detail',
+  scopes: ['write:calendar'],
   description: `\
 Upsert detail metadata (place, url, memo) for a specific event.
 
@@ -126,6 +128,7 @@ type DeleteEventDetailOutput = z.infer<typeof deleteEventDetailOutput>
 
 export const deleteEventDetail: ToolDefinition<DeleteEventDetailInput, DeleteEventDetailOutput> = {
   name: 'delete_event_detail',
+  scopes: ['write:calendar'],
   description: `\
 Delete the detail metadata (place / url / memo) attached to a specific event. Returns { status: 'ok' }.
 

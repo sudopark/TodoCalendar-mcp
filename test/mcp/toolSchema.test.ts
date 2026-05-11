@@ -6,6 +6,7 @@ import type { AnyToolDefinition, ToolDefinition } from '../../src/tools/index.js
 const stub = <I, O>(over: Partial<ToolDefinition<I, O>>): ToolDefinition<I, O> => ({
   name: 'stub',
   description: 'stub',
+  scopes: ['read:calendar'],
   inputSchema: z.object({}) as z.ZodType<I>,
   outputSchema: z.object({}) as z.ZodType<O>,
   execute: async () => ({}) as O,

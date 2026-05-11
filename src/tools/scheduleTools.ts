@@ -34,6 +34,7 @@ type GetSchedulesOutput = z.infer<typeof getSchedulesOutput>
 
 export const getSchedules: ToolDefinition<GetSchedulesInput, GetSchedulesOutput> = {
   name: 'get_schedules',
+  scopes: ['read:calendar'],
   description: `\
 Fetch schedules (calendar events) for the authenticated user that overlap the time range [lower, upper] (Unix epoch seconds, UTC).
 
@@ -91,6 +92,7 @@ type CreateScheduleOutput = z.infer<typeof createScheduleOutput>
 
 export const createSchedule: ToolDefinition<CreateScheduleInput, CreateScheduleOutput> = {
   name: 'create_schedule',
+  scopes: ['write:calendar'],
   description: `\
 Create a new schedule (calendar event) for the authenticated user. Returns the created schedule with its assigned uuid.
 
@@ -144,6 +146,7 @@ type UpdateScheduleOutput = z.infer<typeof updateScheduleOutput>
 
 export const updateSchedule: ToolDefinition<UpdateScheduleInput, UpdateScheduleOutput> = {
   name: 'update_schedule',
+  scopes: ['write:calendar'],
   description: `\
 Partially update a schedule's fields (PATCH). Returns the full updated schedule.
 
@@ -189,6 +192,7 @@ export const excludeScheduleOccurrence: ToolDefinition<
   ExcludeScheduleOccurrenceOutput
 > = {
   name: 'exclude_schedule_occurrence',
+  scopes: ['write:calendar'],
   description: `\
 Skip a single occurrence of a repeating schedule, leaving the rest of the recurrence intact. Returns the updated origin schedule (with the timestamp added to its 'exclude_repeatings').
 
@@ -252,6 +256,7 @@ export const replaceScheduleOccurrence: ToolDefinition<
   ReplaceScheduleOccurrenceOutput
 > = {
   name: 'replace_schedule_occurrence',
+  scopes: ['write:calendar'],
   description: `\
 Replace a single occurrence of a repeating schedule with a one-off schedule. The origin's recurrence continues for all other occurrences; only this slot is replaced. Returns both the updated origin and the new schedule.
 
@@ -315,6 +320,7 @@ export const branchScheduleRepeating: ToolDefinition<
   BranchScheduleRepeatingOutput
 > = {
   name: 'branch_schedule_repeating',
+  scopes: ['write:calendar'],
   description: `\
 Cut a repeating schedule at a point in time and start a new schedule from there. Past occurrences stay on the origin; from \`end_time\` the new schedule takes over. Response has 'new' (the branch schedule) and 'origin' (the capped origin).
 
@@ -371,6 +377,7 @@ type DeleteScheduleOutput = z.infer<typeof deleteScheduleOutput>
 
 export const deleteSchedule: ToolDefinition<DeleteScheduleInput, DeleteScheduleOutput> = {
   name: 'delete_schedule',
+  scopes: ['write:calendar'],
   description: `\
 Permanently delete a schedule (including all of its repeating occurrences if any). CONFIRM-gated: the first call does NOT delete — it returns a confirmToken that must be echoed back to actually execute.
 

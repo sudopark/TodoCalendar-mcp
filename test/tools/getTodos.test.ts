@@ -36,7 +36,7 @@ vi.mock('../../src/openapi/client.js', () => ({
 
 const { getTodos } = await import('../../src/tools/todoTools.js')
 
-const auth: Auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
 beforeEach(() => {
   openApiSpy.lastAuth = null

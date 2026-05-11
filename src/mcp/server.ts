@@ -27,11 +27,16 @@ export type AuthResolver = (extra: McpRequestExtra) => Auth
  * tests catch it explicitly.
  */
 export const resolveAuthFromExtra: AuthResolver = (extra) => {
-  const userId = (extra.authInfo?.extra as { userId?: unknown } | undefined)?.userId
+  const extraRecord = extra.authInfo?.extra as { userId?: unknown; scopes?: unknown } | undefined
+  const userId = extraRecord?.userId
   if (typeof userId !== 'string' || userId === '') {
     throw new AuthInvariantError('extra.authInfo.extra.userId not populated')
   }
-  return { userId }
+  const scopesRaw = extraRecord?.scopes
+  const scopes = Array.isArray(scopesRaw)
+    ? scopesRaw.filter((s): s is string => typeof s === 'string')
+    : []
+  return { userId, scopes }
 }
 
 export interface CreateMcpServerOptions {
@@ -70,6 +75,16 @@ export const createMcpServer = (options: CreateMcpServerOptions = {}): Server =>
       // "tool reported an error" vs "server is misconfigured".
       if (e instanceof AuthInvariantError) throw e
       return buildErrorResult(e)
+    }
+    const missing = tool.scopes.filter((s) => !auth.scopes.includes(s))
+    if (missing.length > 0) {
+      return buildErrorResult(
+        new ToolError(
+          403,
+          'InsufficientScope',
+          `The auth token lacks the required scope. (requires: ${missing.join(' ')})`,
+        ),
+      )
     }
     try {
       const result = await tool.execute(auth, req.params.arguments)

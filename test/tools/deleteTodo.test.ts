@@ -48,7 +48,7 @@ afterEach(() => {
 
 const { deleteTodo } = await import('../../src/tools/todoTools.js')
 
-const auth: Auth = { userId: 'u-1' }
+const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
 beforeEach(() => {
   openApiSpy.lastAuth = null
@@ -133,7 +133,7 @@ describe('delete_todo — 2단계: 매치되는 confirmToken으로 재호출 →
 describe('delete_todo — confirmToken 거부 케이스', () => {
   it('다른 사용자가 발급받은 토큰 → SubMismatch ToolError', async () => {
     const otherStep1 = (await deleteTodo.execute(
-      { userId: 'u-attacker' },
+      { userId: 'u-attacker', scopes: ['read:calendar', 'write:calendar'] },
       { todo_id: 't-1' },
     )) as { confirmToken: string }
 
