@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
-import { doneTodoSchema, eventTimeSchema } from './shared/schemas.js'
+import { doneTodoSchema, eventDetailSchema, eventTimeSchema, todoSchema } from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const DEFAULT_SIZE = 50
@@ -63,6 +63,55 @@ type UpdateDoneTodoInput = z.infer<typeof updateDoneTodoInput>
 const updateDoneTodoOutput = doneTodoSchema
 
 type UpdateDoneTodoOutput = z.infer<typeof updateDoneTodoOutput>
+
+const revertDoneTodoInput = z
+  .object({
+    done_todo_id: z
+      .string()
+      .min(1)
+      .describe('UUID of the done-todo to revert back to active.'),
+  })
+  .describe(
+    'Revert a previously-completed (done) todo back to the active todo list. The done record is removed and a new active todo is created with any preserved detail.',
+  )
+
+type RevertDoneTodoInput = z.infer<typeof revertDoneTodoInput>
+
+const revertDoneTodoOutput = z
+  .object({
+    todo: todoSchema.describe('The newly-activated todo created from the reverted done-todo.'),
+    detail: eventDetailSchema
+      .nullable()
+      .optional()
+      .describe(
+        'Event detail (place/url/memo) carried back to the new active todo. Null when no detail was attached.',
+      ),
+  })
+  .describe('Result of reverting a done-todo: the new active todo and any carried-over detail.')
+
+type RevertDoneTodoOutput = z.infer<typeof revertDoneTodoOutput>
+
+export const revertDoneTodo: ToolDefinition<RevertDoneTodoInput, RevertDoneTodoOutput> = {
+  name: 'revert_done_todo',
+  description: `\
+Revert a completed (done) todo back to the active list. Returns the new active todo and any carried-over event detail.
+
+This deletes the done-todo record and creates a fresh active todo with the preserved name/event_time/event_tag_id. Use this when a completion was a mistake or needs to be redone.`,
+  inputSchema: revertDoneTodoInput,
+  outputSchema: revertDoneTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<RevertDoneTodoOutput> => {
+    const { done_todo_id } = revertDoneTodoInput.parse(args)
+    try {
+      return await callOpenApi<RevertDoneTodoOutput>(
+        auth,
+        'POST',
+        `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}/revert`,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
 
 export const updateDoneTodo: ToolDefinition<UpdateDoneTodoInput, UpdateDoneTodoOutput> = {
   name: 'update_done_todo',
