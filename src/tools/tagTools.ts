@@ -71,15 +71,9 @@ const updateTagInput = z
       .string()
       .optional()
       .describe('Optional new hex color code (e.g. "#ff8800"). Omit to keep unchanged.'),
-    skipCheckDuplicationName: z
-      .boolean()
-      .optional()
-      .describe(
-        'When true, the server skips its duplicate-name check. Use only when intentionally allowing identical names.',
-      ),
   })
   .describe(
-    'Update an existing event tag. Despite using PUT under the hood, this is effectively a partial-style update: only name is required; color_hex and skipCheckDuplicationName are optional flags.',
+    'Update an existing event tag. Only name is required; color_hex is optional. The server enforces a duplicate-name guard — pick a unique name.',
   )
 
 type UpdateTagInput = z.infer<typeof updateTagInput>
@@ -91,7 +85,7 @@ type UpdateTagOutput = z.infer<typeof updateTagOutput>
 export const updateTag: ToolDefinition<UpdateTagInput, UpdateTagOutput> = {
   name: 'update_tag',
   description:
-    "Update an event tag's name and/or color. The tag's uuid stays the same. Set skipCheckDuplicationName=true to bypass the server-side duplicate-name guard (use sparingly).",
+    "Update an event tag's name and/or color. The tag's uuid stays the same. Names must be unique among the caller's tags.",
   inputSchema: updateTagInput,
   outputSchema: updateTagOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateTagOutput> => {

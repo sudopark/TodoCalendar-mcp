@@ -22,21 +22,21 @@ const buildRegistry = (
 }
 
 export const tools = buildRegistry([
-  getTodos as AnyToolDefinition,
-  getSchedules as AnyToolDefinition,
-  getTags as AnyToolDefinition,
-  getEventDetails as AnyToolDefinition,
-  getDoneTodos as AnyToolDefinition,
+  completeTodo as AnyToolDefinition,
+  createSchedule as AnyToolDefinition,
   createTag as AnyToolDefinition,
   createTodo as AnyToolDefinition,
-  createSchedule as AnyToolDefinition,
+  getDoneTodos as AnyToolDefinition,
+  getEventDetails as AnyToolDefinition,
+  getSchedules as AnyToolDefinition,
+  getTags as AnyToolDefinition,
+  getTodos as AnyToolDefinition,
+  revertDoneTodo as AnyToolDefinition,
   setEventDetail as AnyToolDefinition,
-  updateTodo as AnyToolDefinition,
+  updateDoneTodo as AnyToolDefinition,
   updateSchedule as AnyToolDefinition,
   updateTag as AnyToolDefinition,
-  completeTodo as AnyToolDefinition,
-  updateDoneTodo as AnyToolDefinition,
-  revertDoneTodo as AnyToolDefinition,
+  updateTodo as AnyToolDefinition,
 ])
 
 export {

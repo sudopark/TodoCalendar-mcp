@@ -42,6 +42,30 @@ const getDoneTodosOutput = z
 
 type GetDoneTodosOutput = z.infer<typeof getDoneTodosOutput>
 
+export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput> = {
+  name: 'get_done_todos',
+  description: `\
+Fetch completed (done) todos for the authenticated user, ordered by completion time (newest first), paginated by cursor.
+
+Use 'cursor' to fetch the next page — pass the 'next_cursor' value from the previous response. All timestamps in the response are Unix epoch seconds (UTC).`,
+  inputSchema: getDoneTodosInput,
+  outputSchema: getDoneTodosOutput,
+  execute: async (auth: Auth, args: unknown): Promise<GetDoneTodosOutput> => {
+    const { size, cursor } = getDoneTodosInput.parse(args)
+    const qs = new URLSearchParams({ size: String(size) })
+    if (cursor !== undefined && cursor !== null) qs.set('cursor', String(cursor))
+    try {
+      return await callOpenApi<GetDoneTodosOutput>(
+        auth,
+        'GET',
+        `/v2/open/todos/dones/?${qs.toString()}`,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
 const updateDoneTodoInput = z
   .object({
     done_todo_id: z.string().min(1).describe('UUID of the done-todo to update.'),
@@ -63,55 +87,6 @@ type UpdateDoneTodoInput = z.infer<typeof updateDoneTodoInput>
 const updateDoneTodoOutput = doneTodoSchema
 
 type UpdateDoneTodoOutput = z.infer<typeof updateDoneTodoOutput>
-
-const revertDoneTodoInput = z
-  .object({
-    done_todo_id: z
-      .string()
-      .min(1)
-      .describe('UUID of the done-todo to revert back to active.'),
-  })
-  .describe(
-    'Revert a previously-completed (done) todo back to the active todo list. The done record is removed and a new active todo is created with any preserved detail.',
-  )
-
-type RevertDoneTodoInput = z.infer<typeof revertDoneTodoInput>
-
-const revertDoneTodoOutput = z
-  .object({
-    todo: todoSchema.describe('The newly-activated todo created from the reverted done-todo.'),
-    detail: eventDetailSchema
-      .nullable()
-      .optional()
-      .describe(
-        'Event detail (place/url/memo) carried back to the new active todo. Null when no detail was attached.',
-      ),
-  })
-  .describe('Result of reverting a done-todo: the new active todo and any carried-over detail.')
-
-type RevertDoneTodoOutput = z.infer<typeof revertDoneTodoOutput>
-
-export const revertDoneTodo: ToolDefinition<RevertDoneTodoInput, RevertDoneTodoOutput> = {
-  name: 'revert_done_todo',
-  description: `\
-Revert a completed (done) todo back to the active list. Returns the new active todo and any carried-over event detail.
-
-This deletes the done-todo record and creates a fresh active todo with the preserved name/event_time/event_tag_id. Use this when a completion was a mistake or needs to be redone.`,
-  inputSchema: revertDoneTodoInput,
-  outputSchema: revertDoneTodoOutput,
-  execute: async (auth: Auth, args: unknown): Promise<RevertDoneTodoOutput> => {
-    const { done_todo_id } = revertDoneTodoInput.parse(args)
-    try {
-      return await callOpenApi<RevertDoneTodoOutput>(
-        auth,
-        'POST',
-        `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}/revert`,
-      )
-    } catch (e) {
-      return wrapOpenApiError(e)
-    }
-  },
-}
 
 export const updateDoneTodo: ToolDefinition<UpdateDoneTodoInput, UpdateDoneTodoOutput> = {
   name: 'update_done_todo',
@@ -136,23 +111,47 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
   },
 }
 
-export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput> = {
-  name: 'get_done_todos',
-  description: `\
-Fetch completed (done) todos for the authenticated user, ordered by completion time (newest first), paginated by cursor.
+const revertDoneTodoInput = z
+  .object({
+    done_todo_id: z
+      .string()
+      .min(1)
+      .describe('UUID of the done-todo to revert back to active.'),
+  })
+  .describe(
+    'Revert a previously-completed (done) todo back to the active todo list. The done record is removed and a new active todo is created with any preserved detail.',
+  )
 
-Use 'cursor' to fetch the next page — pass the 'next_cursor' value from the previous response. All timestamps in the response are Unix epoch seconds (UTC).`,
-  inputSchema: getDoneTodosInput,
-  outputSchema: getDoneTodosOutput,
-  execute: async (auth: Auth, args: unknown): Promise<GetDoneTodosOutput> => {
-    const { size, cursor } = getDoneTodosInput.parse(args)
-    const qs = new URLSearchParams({ size: String(size) })
-    if (cursor !== undefined && cursor !== null) qs.set('cursor', String(cursor))
+type RevertDoneTodoInput = z.infer<typeof revertDoneTodoInput>
+
+const revertDoneTodoOutput = z
+  .object({
+    todo: todoSchema.describe('The newly-activated todo created from the reverted done-todo.'),
+    detail: eventDetailSchema
+      .nullish()
+      .describe(
+        'Event detail (place/url/memo) carried back to the new active todo. Null when no detail was attached.',
+      ),
+  })
+  .describe('Result of reverting a done-todo: the new active todo and any carried-over detail.')
+
+type RevertDoneTodoOutput = z.infer<typeof revertDoneTodoOutput>
+
+export const revertDoneTodo: ToolDefinition<RevertDoneTodoInput, RevertDoneTodoOutput> = {
+  name: 'revert_done_todo',
+  description: `\
+Revert a completed (done) todo back to the active list. Returns the new active todo and any carried-over event detail.
+
+This deletes the done-todo record and creates a fresh active todo with the preserved name/event_time/event_tag_id. Use this when a completion was a mistake or needs to be redone.`,
+  inputSchema: revertDoneTodoInput,
+  outputSchema: revertDoneTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<RevertDoneTodoOutput> => {
+    const { done_todo_id } = revertDoneTodoInput.parse(args)
     try {
-      return await callOpenApi<GetDoneTodosOutput>(
+      return await callOpenApi<RevertDoneTodoOutput>(
         auth,
-        'GET',
-        `/v2/open/todos/dones/?${qs.toString()}`,
+        'POST',
+        `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}/revert`,
       )
     } catch (e) {
       return wrapOpenApiError(e)
