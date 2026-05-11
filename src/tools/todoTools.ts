@@ -2,7 +2,13 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
-import { eventTimeSchema, repeatingSchema, todoSchema } from './shared/schemas.js'
+import {
+  doneTodoSchema,
+  eventDetailSchema,
+  eventTimeSchema,
+  repeatingSchema,
+  todoSchema,
+} from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const TS_SEC = 'Unix epoch seconds (UTC).'
@@ -151,6 +157,69 @@ type UpdateTodoInput = z.infer<typeof updateTodoInput>
 const updateTodoOutput = todoSchema
 
 type UpdateTodoOutput = z.infer<typeof updateTodoOutput>
+
+const completeTodoInput = z
+  .object({
+    todo_id: z.string().min(1).describe('UUID of the todo to complete.'),
+    origin: todoSchema.describe(
+      'The full origin todo object being completed. Typically the same payload returned by get_todos; pass through verbatim — the server uses it to record the completed snapshot and to handle repeating-turn bookkeeping.',
+    ),
+    next_event_time: eventTimeSchema
+      .optional()
+      .describe(
+        "For repeating todos: timestamp of the next occurrence after this completion. Omit for non-repeating todos.",
+      ),
+    next_repeating_turn: z
+      .string()
+      .optional()
+      .describe('For repeating todos: identifier of the next occurrence (turn).'),
+  })
+  .describe(
+    "Body for completing a todo. Required: 'origin' (the full todo being completed). For repeating todos, optionally include 'next_event_time' / 'next_repeating_turn' to advance the recurrence to the next occurrence.",
+  )
+
+type CompleteTodoInput = z.infer<typeof completeTodoInput>
+
+const completeTodoOutput = z
+  .object({
+    done: doneTodoSchema.describe('The newly-created done todo record.'),
+    next_repeating: todoSchema
+      .nullish()
+      .describe(
+        'When the completed todo was repeating and advanced, the next-turn todo. Null/absent for non-repeating completions.',
+      ),
+    done_detail: eventDetailSchema
+      .nullish()
+      .describe('The event detail (place/url/memo) carried over to the done todo, if any.'),
+  })
+  .describe(
+    'Result of completing a todo: the new done-todo, optionally the next repeating turn, and any carried-over detail.',
+  )
+
+type CompleteTodoOutput = z.infer<typeof completeTodoOutput>
+
+export const completeTodo: ToolDefinition<CompleteTodoInput, CompleteTodoOutput> = {
+  name: 'complete_todo',
+  description: `\
+Mark a todo as completed. Returns the new done-todo record. For repeating todos, optionally advance to the next occurrence by passing 'next_event_time' and 'next_repeating_turn'.
+
+The 'origin' body field must be the full todo object (uuid, userId, name, etc.) — typically the payload returned by get_todos passed through verbatim. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC).`,
+  inputSchema: completeTodoInput,
+  outputSchema: completeTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<CompleteTodoOutput> => {
+    const { todo_id, ...body } = completeTodoInput.parse(args)
+    try {
+      return await callOpenApi<CompleteTodoOutput>(
+        auth,
+        'POST',
+        `/v2/open/todos/${encodeURIComponent(todo_id)}/complete`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
 
 export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
   name: 'update_todo',
