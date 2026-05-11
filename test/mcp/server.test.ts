@@ -78,15 +78,19 @@ describe('mcp server — tools/list', () => {
     const result = await client.listTools()
 
     expect(result.tools.map((t) => t.name).sort()).toEqual([
+      'branch_schedule_repeating',
       'complete_todo',
       'create_schedule',
       'create_tag',
       'create_todo',
+      'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
       'get_schedules',
       'get_tags',
       'get_todos',
+      'replace_schedule_occurrence',
+      'replace_todo',
       'revert_done_todo',
       'set_event_detail',
       'update_done_todo',
