@@ -3,6 +3,7 @@ import { deleteEventDetail, getEventDetails, setEventDetail } from './eventDetai
 import {
   branchScheduleRepeating,
   createSchedule,
+  deleteSchedule,
   excludeScheduleOccurrence,
   getSchedules,
   replaceScheduleOccurrence,
@@ -10,7 +11,14 @@ import {
 } from './scheduleTools.js'
 import type { AnyToolDefinition } from './shared/tool.js'
 import { createTag, deleteTag, getTags, updateTag } from './tagTools.js'
-import { completeTodo, createTodo, getTodos, replaceTodo, updateTodo } from './todoTools.js'
+import {
+  completeTodo,
+  createTodo,
+  deleteTodo,
+  getTodos,
+  replaceTodo,
+  updateTodo,
+} from './todoTools.js'
 
 export type { ToolDefinition, AnyToolDefinition } from './shared/tool.js'
 export { ToolError } from './shared/errors.js'
@@ -36,7 +44,9 @@ export const tools = buildRegistry([
   createTodo as AnyToolDefinition,
   deleteDoneTodo as AnyToolDefinition,
   deleteEventDetail as AnyToolDefinition,
+  deleteSchedule as AnyToolDefinition,
   deleteTag as AnyToolDefinition,
+  deleteTodo as AnyToolDefinition,
   excludeScheduleOccurrence as AnyToolDefinition,
   getDoneTodos as AnyToolDefinition,
   getEventDetails as AnyToolDefinition,
@@ -61,7 +71,9 @@ export {
   createTodo,
   deleteDoneTodo,
   deleteEventDetail,
+  deleteSchedule,
   deleteTag,
+  deleteTodo,
   excludeScheduleOccurrence,
   getDoneTodos,
   getEventDetails,

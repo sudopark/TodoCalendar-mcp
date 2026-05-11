@@ -2,7 +2,17 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
-import { eventTimeSchema, repeatingSchema, scheduleSchema } from './shared/schemas.js'
+import {
+  buildConfirmRequired,
+  confirmRequiredSchema,
+  ensureConfirmToken,
+} from './shared/confirm.js'
+import {
+  eventTimeSchema,
+  repeatingSchema,
+  scheduleSchema,
+  statusOkSchema,
+} from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const TS_SEC = 'Unix epoch seconds (UTC).'
@@ -328,6 +338,69 @@ Upstream caveat (TodoCalendar-Functions #178): the openAPI implementation curren
         'POST',
         `/v2/open/schedules/${encodeURIComponent(schedule_id)}/branch_repeating`,
         body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const deleteScheduleInput = z
+  .object({
+    schedule_id: z.string().min(1).describe('UUID of the schedule to delete.'),
+    confirmToken: z
+      .string()
+      .optional()
+      .describe(
+        'Echo back the token returned by the first call to actually execute the deletion. Omit on the first call to receive a confirmToken.',
+      ),
+  })
+  .describe(
+    'Delete a schedule. This is a CONFIRM-gated tool — see the tool description for the two-step flow.',
+  )
+
+type DeleteScheduleInput = z.infer<typeof deleteScheduleInput>
+
+const deleteScheduleOutput = z
+  .union([confirmRequiredSchema, statusOkSchema])
+  .describe(
+    "Either the confirm_required envelope (first call) or {status:'ok'} after the actual deletion. Note: the openAPI returns HTTP 201 (not 200) for schedule delete — the payload shape is still {status:'ok'}.",
+  )
+
+type DeleteScheduleOutput = z.infer<typeof deleteScheduleOutput>
+
+export const deleteSchedule: ToolDefinition<DeleteScheduleInput, DeleteScheduleOutput> = {
+  name: 'delete_schedule',
+  description: `\
+Permanently delete a schedule (including all of its repeating occurrences if any). CONFIRM-gated: the first call does NOT delete — it returns a confirmToken that must be echoed back to actually execute.
+
+Two-step flow:
+  1. Call with { schedule_id }. Response is { status: 'confirm_required', message, confirmToken, action, target }. No backend mutation has happened.
+  2. Surface 'message' to the end user. If they approve, re-call with { schedule_id, confirmToken } using the SAME schedule_id. The token expires in 5 minutes and is bound to this user + tool + args.
+
+For repeating schedules, this removes the ENTIRE series. To skip a single occurrence while keeping the series, use exclude_schedule_occurrence instead. To replace a single occurrence with a one-off, use replace_schedule_occurrence.`,
+  inputSchema: deleteScheduleInput,
+  outputSchema: deleteScheduleOutput,
+  execute: async (auth: Auth, args: unknown): Promise<DeleteScheduleOutput> => {
+    const parsed = deleteScheduleInput.parse(args)
+    const target = { schedule_id: parsed.schedule_id }
+
+    if (parsed.confirmToken === undefined) {
+      return buildConfirmRequired(
+        'delete_schedule',
+        target,
+        auth.userId,
+        `This will permanently delete schedule '${parsed.schedule_id}' and all of its occurrences. Re-call delete_schedule with the same arguments plus the returned confirmToken to proceed. The token expires in 5 minutes.`,
+      )
+    }
+
+    ensureConfirmToken(parsed.confirmToken, 'delete_schedule', target, auth.userId)
+
+    try {
+      return await callOpenApi<DeleteScheduleOutput>(
+        auth,
+        'DELETE',
+        `/v2/open/schedules/${encodeURIComponent(parsed.schedule_id)}`,
       )
     } catch (e) {
       return wrapOpenApiError(e)

@@ -3,10 +3,16 @@ import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
 import {
+  buildConfirmRequired,
+  confirmRequiredSchema,
+  ensureConfirmToken,
+} from './shared/confirm.js'
+import {
   doneTodoSchema,
   eventDetailSchema,
   eventTimeSchema,
   repeatingSchema,
+  statusOkSchema,
   todoSchema,
 } from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
@@ -297,6 +303,69 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
         'POST',
         `/v2/open/todos/${encodeURIComponent(todo_id)}/replace`,
         body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const deleteTodoInput = z
+  .object({
+    todo_id: z.string().min(1).describe('UUID of the todo to delete.'),
+    confirmToken: z
+      .string()
+      .optional()
+      .describe(
+        'Echo back the token returned by the first call to actually execute the deletion. Omit on the first call to receive a confirmToken.',
+      ),
+  })
+  .describe(
+    'Delete a todo. This is a CONFIRM-gated tool — see the tool description for the two-step flow.',
+  )
+
+type DeleteTodoInput = z.infer<typeof deleteTodoInput>
+
+const deleteTodoOutput = z
+  .union([confirmRequiredSchema, statusOkSchema])
+  .describe(
+    "Either the confirm_required envelope (first call, no destructive effect) or {status:'ok'} after the actual deletion.",
+  )
+
+type DeleteTodoOutput = z.infer<typeof deleteTodoOutput>
+
+export const deleteTodo: ToolDefinition<DeleteTodoInput, DeleteTodoOutput> = {
+  name: 'delete_todo',
+  description: `\
+Permanently delete a todo. CONFIRM-gated: the first call does NOT delete — it returns a confirmToken that must be echoed back to actually execute.
+
+Two-step flow:
+  1. Call with { todo_id }. Response is { status: 'confirm_required', message, confirmToken, action, target }. No backend mutation has happened.
+  2. Surface 'message' to the end user. If they approve, re-call with { todo_id, confirmToken } using the SAME todo_id. The token expires in 5 minutes and is bound to this user + tool + args — passing it to a different tool, args, or user is rejected.
+
+If you want to remove only one occurrence of a repeating todo (origin advances), use replace_todo with origin_next_event_time instead.`,
+  inputSchema: deleteTodoInput,
+  outputSchema: deleteTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<DeleteTodoOutput> => {
+    const parsed = deleteTodoInput.parse(args)
+    const target = { todo_id: parsed.todo_id }
+
+    if (parsed.confirmToken === undefined) {
+      return buildConfirmRequired(
+        'delete_todo',
+        target,
+        auth.userId,
+        `This will permanently delete todo '${parsed.todo_id}'. Re-call delete_todo with the same arguments plus the returned confirmToken to proceed. The token expires in 5 minutes.`,
+      )
+    }
+
+    ensureConfirmToken(parsed.confirmToken, 'delete_todo', target, auth.userId)
+
+    try {
+      return await callOpenApi<DeleteTodoOutput>(
+        auth,
+        'DELETE',
+        `/v2/open/todos/${encodeURIComponent(parsed.todo_id)}`,
       )
     } catch (e) {
       return wrapOpenApiError(e)
