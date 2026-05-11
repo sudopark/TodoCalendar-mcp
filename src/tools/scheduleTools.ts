@@ -185,7 +185,7 @@ Skip a single occurrence of a repeating schedule, leaving the rest of the recurr
 Decision guide for the agent:
   - Use this when the user wants to cancel/skip just one occurrence and keep the recurrence as-is.
   - To replace that occurrence with a one-off schedule (different fields), use replace_schedule_occurrence instead.
-  - To cut the recurrence at a point and start a new series, use branch_schedule_repeating.
+  - To switch the recurrence rule itself from a certain point forward (e.g. daily → weekly starting next Monday), use branch_schedule_repeating.
 
 All timestamps are Unix epoch seconds (UTC).`,
   inputSchema: excludeScheduleOccurrenceInput,
@@ -248,7 +248,7 @@ Replace a single occurrence of a repeating schedule with a one-off schedule. The
 Decision guide for the agent:
   - Use this when the user wants to *replace* one occurrence (different name/time/details) while keeping the rest of the recurrence.
   - To merely cancel/skip an occurrence without a replacement, use exclude_schedule_occurrence.
-  - To cut the recurrence at a point and start a new series from there, use branch_schedule_repeating.
+  - To switch the recurrence rule itself from a certain point forward (e.g. daily → weekly starting next Monday), use branch_schedule_repeating.
 
 The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC).`,
   inputSchema: replaceScheduleOccurrenceInput,
@@ -280,7 +280,7 @@ const branchScheduleRepeatingInput = z
     end_time: z
       .number()
       .describe(
-        `Timestamp (${TS_SEC}) at which the origin's recurrence ends. Occurrences strictly before this time stay on the origin; from this time on, the new schedule takes over.`,
+        `Timestamp (${TS_SEC}) at which the origin's recurrence ends and the new schedule takes over. Boundary inclusivity is not yet locked — see TodoCalendar-Functions #178.`,
       ),
   })
   .describe(
@@ -306,10 +306,11 @@ export const branchScheduleRepeating: ToolDefinition<
 > = {
   name: 'branch_schedule_repeating',
   description: `\
-Cut a repeating schedule at a point in time and start a new schedule from there. Past occurrences stay on the origin; from \`end_time\` onward the new schedule takes over. Response object has keys 'new' (the branch schedule — note that 'new' is a JS reserved word, so destructure with renaming) and 'origin' (the capped origin).
+Cut a repeating schedule at a point in time and start a new schedule from there. Past occurrences stay on the origin; from \`end_time\` the new schedule takes over. Response has 'new' (the branch schedule) and 'origin' (the capped origin).
 
 Decision guide for the agent:
   - Use this when the recurrence definition itself changes from a certain point forward (e.g. user says "from next Monday, switch to weekly Tue/Thu instead of daily").
+  - update_schedule modifies the recurrence rule globally (affects past occurrences too, because the rule is recomputed from start). Use this branch tool when the rule change should apply only from a point onward and past occurrences must be preserved.
   - To replace only one occurrence while keeping the recurrence, use replace_schedule_occurrence.
   - To skip one occurrence with no replacement, use exclude_schedule_occurrence.
 
