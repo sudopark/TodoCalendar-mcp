@@ -289,3 +289,66 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
     }
   },
 }
+
+const branchScheduleRepeatingInput = z
+  .object({
+    schedule_id: z.string().min(1).describe('UUID of the origin (repeating) schedule.'),
+    new: scheduleInputSchema.describe(
+      'New schedule that continues from the branch point. Typically a repeating schedule whose `repeating.start` equals the branch point.',
+    ),
+    end_time: z
+      .number()
+      .describe(
+        `Timestamp (${TS_SEC}) at which the origin's recurrence ends. Occurrences strictly before this time stay on the origin; from this time on, the new schedule takes over.`,
+      ),
+  })
+  .describe(
+    "Body for branching: caps the origin's recurrence at `end_time` and starts a new schedule for the remainder.",
+  )
+
+type BranchScheduleRepeatingInput = z.infer<typeof branchScheduleRepeatingInput>
+
+const branchScheduleRepeatingOutput = z
+  .object({
+    new: scheduleSchema.describe('The new schedule that takes over from the branch point.'),
+    origin: scheduleSchema.describe(
+      "The origin schedule with its recurrence ended at `end_time`.",
+    ),
+  })
+  .describe('Result of branch_schedule_repeating.')
+
+type BranchScheduleRepeatingOutput = z.infer<typeof branchScheduleRepeatingOutput>
+
+export const branchScheduleRepeating: ToolDefinition<
+  BranchScheduleRepeatingInput,
+  BranchScheduleRepeatingOutput
+> = {
+  name: 'branch_schedule_repeating',
+  description: `\
+Cut a repeating schedule at a point in time and start a new schedule from there. Past occurrences stay on the origin; from \`end_time\` onward the new schedule takes over.
+
+Decision guide for the agent:
+  - Use this when the recurrence definition itself changes from a certain point forward (e.g. user says "from next Monday, switch to weekly Tue/Thu instead of daily").
+  - To replace only one occurrence while keeping the recurrence, use replace_schedule_occurrence.
+  - To skip one occurrence with no replacement, use exclude_schedule_occurrence.
+
+Known issue (TodoCalendar-Functions #178): the underlying service currently returns 500 because the openAPI implementation passes model instances to putEvent which Firestore rejects. The spec describes intended behavior; the tool will work as documented once the upstream fix lands. All timestamps are Unix epoch seconds (UTC).`,
+  inputSchema: branchScheduleRepeatingInput,
+  outputSchema: branchScheduleRepeatingOutput,
+  execute: async (
+    auth: Auth,
+    args: unknown,
+  ): Promise<BranchScheduleRepeatingOutput> => {
+    const { schedule_id, ...body } = branchScheduleRepeatingInput.parse(args)
+    try {
+      return await callOpenApi<BranchScheduleRepeatingOutput>(
+        auth,
+        'POST',
+        `/v2/open/schedules/${encodeURIComponent(schedule_id)}/branch_repeating`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
