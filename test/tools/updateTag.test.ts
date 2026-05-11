@@ -64,19 +64,27 @@ describe('update_tag — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ name: 'renamed' })
   })
 
-  it('color_hex + skipCheckDuplicationName 동시 — 모두 body 포함', async () => {
+  it('color_hex 포함 — body에 함께 통과', async () => {
     await updateTag.execute(auth, {
       tag_id: 'tag-1',
       name: 'work',
       color_hex: '#00ff00',
-      skipCheckDuplicationName: true,
     })
 
     expect(openApiSpy.lastBody).toEqual({
       name: 'work',
       color_hex: '#00ff00',
+    })
+  })
+
+  it('skipCheckDuplicationName 등 LLM 비공개 flag — 인자로 들어와도 strip', async () => {
+    await updateTag.execute(auth, {
+      tag_id: 'tag-1',
+      name: 'work',
       skipCheckDuplicationName: true,
     })
+
+    expect(openApiSpy.lastBody).toEqual({ name: 'work' })
   })
 
   it('tag_id URL 인코딩', async () => {

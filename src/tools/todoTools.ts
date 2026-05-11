@@ -158,6 +158,29 @@ const updateTodoOutput = todoSchema
 
 type UpdateTodoOutput = z.infer<typeof updateTodoOutput>
 
+export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
+  name: 'update_todo',
+  description: `\
+Partially update a todo's fields (PATCH). Returns the full updated todo.
+
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
+  inputSchema: updateTodoInput,
+  outputSchema: updateTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<UpdateTodoOutput> => {
+    const { todo_id, ...body } = updateTodoInput.parse(args)
+    try {
+      return await callOpenApi<UpdateTodoOutput>(
+        auth,
+        'PATCH',
+        `/v2/open/todos/${encodeURIComponent(todo_id)}`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
 const completeTodoInput = z
   .object({
     todo_id: z.string().min(1).describe('UUID of the todo to complete.'),
@@ -213,29 +236,6 @@ The 'origin' body field must be the full todo object (uuid, userId, name, etc.) 
         auth,
         'POST',
         `/v2/open/todos/${encodeURIComponent(todo_id)}/complete`,
-        body,
-      )
-    } catch (e) {
-      return wrapOpenApiError(e)
-    }
-  },
-}
-
-export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
-  name: 'update_todo',
-  description: `\
-Partially update a todo's fields (PATCH). Returns the full updated todo.
-
-Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
-  inputSchema: updateTodoInput,
-  outputSchema: updateTodoOutput,
-  execute: async (auth: Auth, args: unknown): Promise<UpdateTodoOutput> => {
-    const { todo_id, ...body } = updateTodoInput.parse(args)
-    try {
-      return await callOpenApi<UpdateTodoOutput>(
-        auth,
-        'PATCH',
-        `/v2/open/todos/${encodeURIComponent(todo_id)}`,
         body,
       )
     } catch (e) {
