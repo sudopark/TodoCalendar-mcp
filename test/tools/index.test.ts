@@ -10,6 +10,7 @@ describe('tools registry', () => {
       'create_tag',
       'create_todo',
       'delete_done_todo',
+      'delete_event_detail',
       'delete_tag',
       'exclude_schedule_occurrence',
       'get_done_todos',
