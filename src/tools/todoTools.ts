@@ -167,7 +167,7 @@ const completeTodoInput = z
     next_event_time: eventTimeSchema
       .optional()
       .describe(
-        "For repeating todos: timestamp of the next occurrence after this completion. Omit for non-repeating todos.",
+        "For repeating todos: EventTime object (tagged union by 'time_type' — 'at' | 'period' | 'allday') of the next occurrence after this completion. Omit for non-repeating todos.",
       ),
     next_repeating_turn: z
       .string()
@@ -226,7 +226,7 @@ export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
   description: `\
 Partially update a todo's fields (PATCH). Returns the full updated todo.
 
-Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC). For repeating-todo branching (split a recurrence into two), use the separate replace_todo tool instead.`,
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
   inputSchema: updateTodoInput,
   outputSchema: updateTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateTodoOutput> => {

@@ -135,7 +135,7 @@ export const updateSchedule: ToolDefinition<UpdateScheduleInput, UpdateScheduleO
   description: `\
 Partially update a schedule's fields (PATCH). Returns the full updated schedule.
 
-Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC). For single-occurrence exclusion or repeating-branch operations, use the dedicated occurrence tools instead.`,
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
   inputSchema: updateScheduleInput,
   outputSchema: updateScheduleOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateScheduleOutput> => {

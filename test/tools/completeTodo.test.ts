@@ -142,6 +142,14 @@ describe('complete_todo — input validation', () => {
     expect(openApiSpy.lastAuth).toBe(auth)
     expect(openApiSpy.lastBody).toEqual({ origin: originTodo })
   })
+
+  it('origin.userId 변조 — swagger 필수 필드라 통과 (backend가 auth.sub로 덮어쓰는 defense에 의존)', async () => {
+    const tampered = { ...originTodo, userId: 'attacker' }
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: tampered })
+
+    expect(openApiSpy.lastAuth).toBe(auth)
+    expect(openApiSpy.lastBody).toEqual({ origin: tampered })
+  })
 })
 
 describe('complete_todo — error wrap', () => {
