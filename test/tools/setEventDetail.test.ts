@@ -160,6 +160,16 @@ describe('set_event_detail — input validation', () => {
     expect(openApiSpy.lastAuth).toBe(auth)
     expect(openApiSpy.lastBody).toEqual({ place: 'x' })
   })
+
+  it('nested userId 변조 — detail 안에 끼워넣어도 strip되고 body에 안 포함', async () => {
+    await setEventDetail.execute(auth, {
+      event_id: 'evt-1',
+      is_done: false,
+      detail: { place: 'x', userId: 'attacker' },
+    })
+
+    expect(openApiSpy.lastBody).toEqual({ place: 'x' })
+  })
 })
 
 describe('set_event_detail — error wrap', () => {
