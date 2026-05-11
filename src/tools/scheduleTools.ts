@@ -45,11 +45,11 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
   },
 }
 
-const createScheduleInput = z
+const scheduleInputSchema = z
   .object({
     name: z.string().min(1).describe('Display name for the schedule (non-empty).'),
     event_time: eventTimeSchema.describe(
-      "Required. Tagged union by 'time_type' ('at' | 'period' | 'allday'). Unlike create_todo, schedules must always have a time.",
+      "Required. Tagged union by 'time_type' ('at' | 'period' | 'allday'). Unlike todos, schedules must always have a time.",
     ),
     event_tag_id: z
       .string()
@@ -68,8 +68,10 @@ const createScheduleInput = z
       ),
   })
   .describe(
-    'Body for creating a new schedule. The owner is taken from the auth context — never pass userId here.',
+    'Schedule creation payload (used by create_schedule and the `new` field of replace_schedule_occurrence / branch_schedule_repeating). The owner is taken from the auth context — never pass userId here.',
   )
+
+const createScheduleInput = scheduleInputSchema
 
 type CreateScheduleInput = z.infer<typeof createScheduleInput>
 
@@ -152,27 +154,6 @@ Only the fields you include in the body are applied — omitted fields stay as-i
     }
   },
 }
-
-const scheduleInputSchema = z
-  .object({
-    name: z.string().min(1).describe('Display name for the schedule (non-empty).'),
-    event_time: eventTimeSchema.describe(
-      "Required. Tagged union by 'time_type' ('at' | 'period' | 'allday').",
-    ),
-    event_tag_id: z.string().optional().describe('Optional tag uuid.'),
-    repeating: repeatingSchema.optional().describe('Optional recurrence rule.'),
-    notification_options: z
-      .array(z.unknown())
-      .optional()
-      .describe('Optional notification config objects (opaque shape).'),
-    show_turns: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('Optional per-occurrence visibility map (opaque key→value object).'),
-  })
-  .describe(
-    'Schedule creation payload — the owner is taken from the auth context; never pass userId.',
-  )
 
 const excludeScheduleOccurrenceInput = z
   .object({
@@ -325,14 +306,14 @@ export const branchScheduleRepeating: ToolDefinition<
 > = {
   name: 'branch_schedule_repeating',
   description: `\
-Cut a repeating schedule at a point in time and start a new schedule from there. Past occurrences stay on the origin; from \`end_time\` onward the new schedule takes over.
+Cut a repeating schedule at a point in time and start a new schedule from there. Past occurrences stay on the origin; from \`end_time\` onward the new schedule takes over. Response object has keys 'new' (the branch schedule — note that 'new' is a JS reserved word, so destructure with renaming) and 'origin' (the capped origin).
 
 Decision guide for the agent:
   - Use this when the recurrence definition itself changes from a certain point forward (e.g. user says "from next Monday, switch to weekly Tue/Thu instead of daily").
   - To replace only one occurrence while keeping the recurrence, use replace_schedule_occurrence.
   - To skip one occurrence with no replacement, use exclude_schedule_occurrence.
 
-Known issue (TodoCalendar-Functions #178): the underlying service currently returns 500 because the openAPI implementation passes model instances to putEvent which Firestore rejects. The spec describes intended behavior; the tool will work as documented once the upstream fix lands. All timestamps are Unix epoch seconds (UTC).`,
+Upstream caveat (TodoCalendar-Functions #178): the openAPI implementation currently returns 500 — expect a 500-class ToolError until that fix ships. The tool wiring matches the spec, so call it normally when the use-case fits; do not avoid the tool, the error will be the upstream service, not the call. All timestamps are Unix epoch seconds (UTC).`,
   inputSchema: branchScheduleRepeatingInput,
   outputSchema: branchScheduleRepeatingOutput,
   execute: async (
