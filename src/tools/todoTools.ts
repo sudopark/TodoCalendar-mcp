@@ -337,13 +337,16 @@ type DeleteTodoOutput = z.infer<typeof deleteTodoOutput>
 export const deleteTodo: ToolDefinition<DeleteTodoInput, DeleteTodoOutput> = {
   name: 'delete_todo',
   description: `\
-Permanently delete a todo. CONFIRM-gated: the first call does NOT delete — it returns a confirmToken that must be echoed back to actually execute.
+Permanently delete a todo (full deletion — for non-repeating todos this just removes the record; for repeating todos this removes the ENTIRE series). CONFIRM-gated: the first call does NOT delete — it returns a confirmToken that must be echoed back to actually execute.
 
 Two-step flow:
   1. Call with { todo_id }. Response is { status: 'confirm_required', message, confirmToken, action, target }. No backend mutation has happened.
   2. Surface 'message' to the end user. If they approve, re-call with { todo_id, confirmToken } using the SAME todo_id. The token expires in 5 minutes and is bound to this user + tool + args — passing it to a different tool, args, or user is rejected.
 
-If you want to remove only one occurrence of a repeating todo (origin advances), use replace_todo with origin_next_event_time instead.`,
+Decision guide vs. other tools for repeating todos (openAPI has NO skip-one-turn endpoint for todos):
+  - To replace a single occurrence (origin advances to the next turn, current turn becomes a different todo): use replace_todo with origin_next_event_time.
+  - To skip a single occurrence without replacing it (no equivalent of exclude_schedule_occurrence): use replace_todo with origin_next_event_time set to the turn AFTER the one being skipped, with the 'new' todo describing a no-op (e.g. completed/cancelled state) — there is no direct skip-only endpoint.
+  - To remove the entire series: this tool (delete_todo).`,
   inputSchema: deleteTodoInput,
   outputSchema: deleteTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<DeleteTodoOutput> => {

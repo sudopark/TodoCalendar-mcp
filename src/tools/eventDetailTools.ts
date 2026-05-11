@@ -129,7 +129,7 @@ export const deleteEventDetail: ToolDefinition<DeleteEventDetailInput, DeleteEve
   description: `\
 Delete the detail metadata (place / url / memo) attached to a specific event. Returns { status: 'ok' }.
 
-This removes only the detail record — the parent event (todo / schedule / done-todo) remains. To delete the parent event itself, use delete_todo / delete_schedule / delete_done_todo.
+This removes only the detail record — the parent event (todo / schedule / done-todo) remains. To delete the parent event itself, use delete_todo / delete_schedule / delete_done_todo. If the user wants to bring a done todo back to the active list (not just clear its detail), use revert_done_todo instead — this tool only removes place/url/memo metadata.
 
 The active vs done routing is governed by the 'is_done' input flag — set it based on which list the event came from (active todos/schedules → false; done todos → true).`,
   inputSchema: deleteEventDetailInput,
