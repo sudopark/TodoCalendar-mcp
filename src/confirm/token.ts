@@ -20,7 +20,12 @@ const canonical = (v: unknown): string => {
 const computeArgsHash = (args: unknown): string =>
   crypto.createHash('sha256').update(canonical(args)).digest('hex')
 
-export type ConfirmTokenReason = 'Expired' | 'ToolMismatch' | 'ArgsMismatch' | 'Invalid'
+export type ConfirmTokenReason =
+  | 'Expired'
+  | 'ToolMismatch'
+  | 'ArgsMismatch'
+  | 'SubMismatch'
+  | 'Invalid'
 
 export class ConfirmTokenError extends Error {
   constructor(
@@ -32,15 +37,20 @@ export class ConfirmTokenError extends Error {
   }
 }
 
-export const signConfirmToken = (tool: string, args: unknown): string => {
+export const signConfirmToken = (tool: string, args: unknown, userId: string): string => {
   return jwt.sign(
-    { tool, argsHash: computeArgsHash(args) },
+    { tool, argsHash: computeArgsHash(args), sub: userId },
     requireEnv('CONFIRM_SECRET'),
     { algorithm: 'HS256', expiresIn: TTL_SECONDS },
   )
 }
 
-export const verifyConfirmToken = (token: string, tool: string, args: unknown): void => {
+export const verifyConfirmToken = (
+  token: string,
+  tool: string,
+  args: unknown,
+  userId: string,
+): void => {
   let decoded: jwt.JwtPayload
   try {
     const result = jwt.verify(token, requireEnv('CONFIRM_SECRET'), {
@@ -66,6 +76,14 @@ export const verifyConfirmToken = (token: string, tool: string, args: unknown): 
     throw new ConfirmTokenError(
       'ToolMismatch',
       `confirm token issued for "${decodedTool}", got "${tool}"`,
+    )
+  }
+
+  const decodedSub = typeof decoded.sub === 'string' ? decoded.sub : ''
+  if (decodedSub !== userId) {
+    throw new ConfirmTokenError(
+      'SubMismatch',
+      'confirm token does not belong to current user',
     )
   }
 
