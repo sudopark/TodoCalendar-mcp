@@ -1,7 +1,20 @@
 import type { AddressInfo } from 'node:net'
 import type { Server as HttpServer } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { OAuthTokenError } from '../src/auth/oauthVerify.js'
 import type { Auth } from '../src/auth/types.js'
+
+const verifyOAuthTokenMock = vi.fn()
+
+vi.mock('../src/auth/oauthVerify.js', async () => {
+  const actual = await vi.importActual<typeof import('../src/auth/oauthVerify.js')>(
+    '../src/auth/oauthVerify.js',
+  )
+  return {
+    ...actual,
+    verifyOAuthToken: (...args: unknown[]) => verifyOAuthTokenMock(...args),
+  }
+})
 
 // HTTP 진입점·라우팅·auth 게이트 회귀 잡기. listen은 ephemeral port + native fetch.
 // MCP 핸들러 자체 로직은 test/mcp/server.test.ts(InMemoryTransport)에서 별도 검증.
@@ -38,7 +51,25 @@ vi.mock('../src/openapi/client.js', () => ({
   },
 }))
 
-const { createHttpServer, parseAllowedHosts } = await import('../src/server.js')
+const { createHttpServer, parseAllowedHosts, resolveAuthMode } = await import('../src/server.js')
+
+describe('resolveAuthMode', () => {
+  it('AUTH_MODE=dev → dev', () => {
+    expect(resolveAuthMode('dev')).toBe('dev')
+  })
+
+  it('AUTH_MODE=oauth → oauth', () => {
+    expect(resolveAuthMode('oauth')).toBe('oauth')
+  })
+
+  it('AUTH_MODE 미설정 → oauth (안전한 default)', () => {
+    expect(resolveAuthMode(undefined)).toBe('oauth')
+  })
+
+  it('알 수 없는 값 → oauth (안전한 default)', () => {
+    expect(resolveAuthMode('whatever')).toBe('oauth')
+  })
+})
 
 describe('parseAllowedHosts', () => {
   it('undefined → undefined (protection 비활성)', () => {
@@ -70,7 +101,11 @@ let httpServer: HttpServer
 let baseUrl: string
 
 beforeAll(async () => {
-  httpServer = createHttpServer()
+  httpServer = createHttpServer({
+    authMode: 'dev',
+    canonicalUri: 'http://localhost:3000/mcp',
+    issuer: 'https://api.todocalendar.example',
+  })
   await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
   const addr = httpServer.address() as AddressInfo
   baseUrl = `http://127.0.0.1:${addr.port}`
@@ -90,6 +125,7 @@ beforeEach(() => {
   openApiSpy.callCount = 0
   openApiSpy.responseError = null
   openApiSpy.responsePayload = []
+  verifyOAuthTokenMock.mockReset()
 })
 
 
@@ -151,6 +187,134 @@ describe('auth gate', () => {
       body: '{}',
     })
     expect(res.status).toBe(401)
+  })
+})
+
+describe('GET /.well-known/oauth-protected-resource (RFC 9728)', () => {
+  it('canonicalUri+issuer 주입된 dev server — 200 + 정확한 형식', async () => {
+    const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as Record<string, unknown>
+    expect(body).toEqual({
+      resource: 'http://localhost:3000/mcp',
+      authorization_servers: ['https://api.todocalendar.example'],
+      bearer_methods_supported: ['header'],
+      scopes_supported: ['read:calendar', 'write:calendar'],
+    })
+  })
+
+  it('env 없는 server — 404', async () => {
+    const stripped = createHttpServer({ authMode: 'dev' })
+    await new Promise<void>((r) => stripped.listen(0, '127.0.0.1', r))
+    const addr = stripped.address() as AddressInfo
+    const stripUrl = `http://127.0.0.1:${addr.port}`
+    try {
+      const res = await fetch(`${stripUrl}/.well-known/oauth-protected-resource`)
+      expect(res.status).toBe(404)
+    } finally {
+      await new Promise<void>((r, j) => stripped.close((e) => (e ? j(e) : r())))
+    }
+  })
+})
+
+describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1)', () => {
+  let oauthServer: HttpServer
+  let oauthUrl: string
+
+  beforeAll(async () => {
+    oauthServer = createHttpServer({
+      authMode: 'oauth',
+      canonicalUri: 'http://localhost:3000/mcp',
+      issuer: 'https://api.todocalendar.example',
+    })
+    await new Promise<void>((r) => oauthServer.listen(0, '127.0.0.1', r))
+    const addr = oauthServer.address() as AddressInfo
+    oauthUrl = `http://127.0.0.1:${addr.port}`
+  })
+
+  afterAll(async () => {
+    await new Promise<void>((r, j) => oauthServer.close((e) => (e ? j(e) : r())))
+  })
+
+  it('Authorization 헤더 누락 — 401 + Bearer challenge (error 없음, RFC 6750 §3)', async () => {
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    expect(res.status).toBe(401)
+    const wwwAuth = res.headers.get('www-authenticate') ?? ''
+    expect(wwwAuth).toMatch(/^Bearer\b/)
+    expect(wwwAuth).toMatch(/realm="http:\/\/localhost:3000\/mcp"/)
+    expect(wwwAuth).toMatch(/resource_metadata="http:\/\/[^"]+\/.well-known\/oauth-protected-resource"/)
+    expect(wwwAuth).not.toMatch(/error=/)
+  })
+
+  it('Bearer가 아닌 헤더 — 401 + challenge (Authorization Required)', async () => {
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Basic dXNlcjpwYXNz' },
+      body: '{}',
+    })
+    expect(res.status).toBe(401)
+    expect(res.headers.get('www-authenticate')).toMatch(/^Bearer\b/)
+  })
+
+  it('만료 token — 401 + invalid_token + reason 보존', async () => {
+    verifyOAuthTokenMock.mockRejectedValue(new OAuthTokenError('Expired', 'access token expired'))
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer dead.token.here' },
+      body: '{}',
+    })
+    expect(res.status).toBe(401)
+    const wwwAuth = res.headers.get('www-authenticate') ?? ''
+    expect(wwwAuth).toMatch(/error="invalid_token"/)
+    expect(wwwAuth).toMatch(/error_description="Expired/)
+    const body = (await res.json()) as { reason: string; message: string }
+    expect(body.reason).toBe('Expired')
+  })
+
+  it('audience mismatch — 401 + invalid_token + reason=AudienceMismatch', async () => {
+    verifyOAuthTokenMock.mockRejectedValue(
+      new OAuthTokenError('AudienceMismatch', 'audience mismatch'),
+    )
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer x.y.z' },
+      body: '{}',
+    })
+    expect(res.status).toBe(401)
+    const wwwAuth = res.headers.get('www-authenticate') ?? ''
+    expect(wwwAuth).toMatch(/error_description="AudienceMismatch/)
+  })
+
+  it('정상 token — auth gate 통과 (initialize 200)', async () => {
+    verifyOAuthTokenMock.mockResolvedValue({
+      userId: 'oauth-user-1',
+      scopes: ['read:calendar', 'write:calendar'],
+    })
+    const initBody = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'test', version: '0.0.0' },
+      },
+    }
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: 'Bearer valid.token.here',
+      },
+      body: JSON.stringify(initBody),
+    })
+    expect(res.status).toBe(200)
+    expect(verifyOAuthTokenMock).toHaveBeenCalledWith('valid.token.here')
   })
 })
 
