@@ -1,9 +1,9 @@
-import { getDoneTodos } from './doneTodoTools.js'
+import { getDoneTodos, revertDoneTodo, updateDoneTodo } from './doneTodoTools.js'
 import { getEventDetails, setEventDetail } from './eventDetailTools.js'
-import { createSchedule, getSchedules } from './scheduleTools.js'
+import { createSchedule, getSchedules, updateSchedule } from './scheduleTools.js'
 import type { AnyToolDefinition } from './shared/tool.js'
-import { createTag, getTags } from './tagTools.js'
-import { createTodo, getTodos } from './todoTools.js'
+import { createTag, getTags, updateTag } from './tagTools.js'
+import { completeTodo, createTodo, getTodos, updateTodo } from './todoTools.js'
 
 export type { ToolDefinition, AnyToolDefinition } from './shared/tool.js'
 export { ToolError } from './shared/errors.js'
@@ -31,9 +31,16 @@ export const tools = buildRegistry([
   createTodo as AnyToolDefinition,
   createSchedule as AnyToolDefinition,
   setEventDetail as AnyToolDefinition,
+  updateTodo as AnyToolDefinition,
+  updateSchedule as AnyToolDefinition,
+  updateTag as AnyToolDefinition,
+  completeTodo as AnyToolDefinition,
+  updateDoneTodo as AnyToolDefinition,
+  revertDoneTodo as AnyToolDefinition,
 ])
 
 export {
+  completeTodo,
   createSchedule,
   createTag,
   createTodo,
@@ -42,5 +49,10 @@ export {
   getSchedules,
   getTags,
   getTodos,
+  revertDoneTodo,
   setEventDetail,
+  updateDoneTodo,
+  updateSchedule,
+  updateTag,
+  updateTodo,
 }
