@@ -155,6 +155,15 @@ describe('replace_todo — input validation', () => {
     expect(openApiSpy.lastAuth).toBe(auth)
     expect(openApiSpy.lastBody).toEqual({ new: { name: 'x' } })
   })
+
+  it('nested userId(new 안) — zod strip으로 백엔드까지 안 흐름 (contract pin)', async () => {
+    await replaceTodo.execute(auth, {
+      todo_id: 't-1',
+      new: { name: 'x', userId: 'attacker' },
+    })
+
+    expect(openApiSpy.lastBody).toEqual({ new: { name: 'x' } })
+  })
 })
 
 describe('replace_todo — error wrap', () => {

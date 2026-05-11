@@ -178,6 +178,19 @@ describe('replace_schedule_occurrence — input validation', () => {
       exclude_repeatings: 1_700_003_600,
     })
   })
+
+  it('nested userId(new 안) — zod strip으로 백엔드까지 안 흐름 (contract pin)', async () => {
+    await replaceScheduleOccurrence.execute(auth, {
+      schedule_id: 's-1',
+      new: { ...newSchedule, userId: 'attacker' },
+      exclude_repeatings: 1_700_003_600,
+    })
+
+    expect(openApiSpy.lastBody).toEqual({
+      new: newSchedule,
+      exclude_repeatings: 1_700_003_600,
+    })
+  })
 })
 
 describe('replace_schedule_occurrence — error wrap', () => {

@@ -177,6 +177,19 @@ describe('branch_schedule_repeating — input validation', () => {
       end_time: 1_700_003_600,
     })
   })
+
+  it('nested userId(new 안) — zod strip으로 백엔드까지 안 흐름 (contract pin)', async () => {
+    await branchScheduleRepeating.execute(auth, {
+      schedule_id: 's-1',
+      new: { ...newSchedule, userId: 'attacker' },
+      end_time: 1_700_003_600,
+    })
+
+    expect(openApiSpy.lastBody).toEqual({
+      new: newSchedule,
+      end_time: 1_700_003_600,
+    })
+  })
 })
 
 describe('branch_schedule_repeating — error wrap', () => {
