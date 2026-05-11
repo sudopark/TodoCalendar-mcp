@@ -2,7 +2,13 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
-import { doneTodoSchema, eventDetailSchema, eventTimeSchema, todoSchema } from './shared/schemas.js'
+import {
+  doneTodoSchema,
+  eventDetailSchema,
+  eventTimeSchema,
+  statusOkSchema,
+  todoSchema,
+} from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const DEFAULT_SIZE = 50
@@ -152,6 +158,42 @@ This deletes the done-todo record and creates a fresh active todo with the prese
         auth,
         'POST',
         `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}/revert`,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const deleteDoneTodoInput = z
+  .object({
+    done_todo_id: z.string().min(1).describe('UUID of the done-todo to delete.'),
+  })
+  .describe(
+    'Permanently delete a completed (done) todo record. The active list is unaffected. If you want to restore the todo to the active list instead, use revert_done_todo.',
+  )
+
+type DeleteDoneTodoInput = z.infer<typeof deleteDoneTodoInput>
+
+const deleteDoneTodoOutput = statusOkSchema
+
+type DeleteDoneTodoOutput = z.infer<typeof deleteDoneTodoOutput>
+
+export const deleteDoneTodo: ToolDefinition<DeleteDoneTodoInput, DeleteDoneTodoOutput> = {
+  name: 'delete_done_todo',
+  description: `\
+Permanently delete a completed (done) todo record. Returns { status: 'ok' }.
+
+This does NOT bring the todo back to the active list — for that, use revert_done_todo. Use delete_done_todo only when the record should be purged outright.`,
+  inputSchema: deleteDoneTodoInput,
+  outputSchema: deleteDoneTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<DeleteDoneTodoOutput> => {
+    const { done_todo_id } = deleteDoneTodoInput.parse(args)
+    try {
+      return await callOpenApi<DeleteDoneTodoOutput>(
+        auth,
+        'DELETE',
+        `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}`,
       )
     } catch (e) {
       return wrapOpenApiError(e)

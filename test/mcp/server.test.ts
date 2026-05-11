@@ -83,6 +83,7 @@ describe('mcp server — tools/list', () => {
       'create_schedule',
       'create_tag',
       'create_todo',
+      'delete_done_todo',
       'delete_tag',
       'exclude_schedule_occurrence',
       'get_done_todos',
