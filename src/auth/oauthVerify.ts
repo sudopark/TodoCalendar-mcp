@@ -122,6 +122,7 @@ const resolveKey = async (issuer: string, kid: string): Promise<KeyObject> => {
   const now = Date.now()
   let entry = jwksCache
   let justFetched = false
+  let staleFallback = false
 
   if (entry === null || isExpired(entry, now)) {
     try {
@@ -132,6 +133,7 @@ const resolveKey = async (issuer: string, kid: string): Promise<KeyObject> => {
       // stale fallback — STALE_MAX_MS 안이어야. 넘으면 revoked key 우려라 throw.
       if (jwksCache !== null && !isStaleBeyondMax(jwksCache, now)) {
         entry = jwksCache
+        staleFallback = true
       } else {
         throw e
       }
@@ -141,8 +143,9 @@ const resolveKey = async (issuer: string, kid: string): Promise<KeyObject> => {
   let key = entry.keys.get(kid)
   if (key !== undefined) return key
 
-  // rotation: 캐시에 없으면 1회 강제 재fetch
-  if (!justFetched) {
+  // rotation: 캐시에 없으면 1회 강제 재fetch.
+  // stale fallback 경로면 건너뜀 — 방금 fetch 실패한 endpoint를 다시 두드리는 건 의미 없음.
+  if (!justFetched && !staleFallback) {
     try {
       const fresh = await fetchJwksDeduped(issuer)
       jwksCache = fresh
