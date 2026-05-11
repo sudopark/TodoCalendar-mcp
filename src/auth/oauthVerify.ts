@@ -3,10 +3,17 @@ import jwt from 'jsonwebtoken'
 import { requireEnv } from '../internal/env.js'
 
 const JWKS_TTL_MS = 5 * 60 * 1000
+// stale cache 허용 상한 — fetch 영구 실패 시 revoked key 무기한 통과 방지.
+// TTL(5분) 만료 후 STALE_MAX_MS 안이면 fetch 실패 시 stale 사용 가능, 넘으면 throw.
+const JWKS_STALE_MAX_MS = 30 * 60 * 1000
+const JWKS_FETCH_TIMEOUT_MS = 5000
+// jwt exp/nbf 클록 드리프트 허용 — AS·RS 시계 차이로 boundary token 거부 방지.
+const CLOCK_TOLERANCE_SECONDS = 30
 
 export interface OAuthAuth {
   userId: string
   scopes: string[]
+  clientId?: string
 }
 
 export type OAuthTokenReason =
@@ -44,6 +51,8 @@ interface JwksResponse {
 
 // module-scope cache. test에서 격리할 땐 __resetJwksCacheForTest() 사용.
 let jwksCache: JwksCacheEntry | null = null
+// in-flight fetch dedupe — 동시 요청이 만료 캐시 만나면 한 번만 fetch.
+let jwksInflight: Promise<JwksCacheEntry> | null = null
 
 const jwksUrl = (issuer: string): string => {
   const trimmed = issuer.endsWith('/') ? issuer.slice(0, -1) : issuer
@@ -54,7 +63,7 @@ const fetchJwks = async (issuer: string): Promise<JwksCacheEntry> => {
   const url = jwksUrl(issuer)
   let res: Response
   try {
-    res = await fetch(url)
+    res = await fetch(url, { signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS) })
   } catch (e) {
     throw new OAuthTokenError(
       'Invalid',
@@ -93,9 +102,21 @@ const fetchJwks = async (issuer: string): Promise<JwksCacheEntry> => {
 const isExpired = (entry: JwksCacheEntry, now: number): boolean =>
   now - entry.cachedAt >= JWKS_TTL_MS
 
+const isStaleBeyondMax = (entry: JwksCacheEntry, now: number): boolean =>
+  now - entry.cachedAt >= JWKS_STALE_MAX_MS
+
+// 동시 fetch dedupe — 같은 fetch promise를 공유.
+const fetchJwksDeduped = async (issuer: string): Promise<JwksCacheEntry> => {
+  if (jwksInflight !== null) return jwksInflight
+  jwksInflight = fetchJwks(issuer).finally(() => {
+    jwksInflight = null
+  })
+  return jwksInflight
+}
+
 // kid → key 해석.
 //   - 캐시 hit + TTL 안 만료 → 그대로
-//   - 캐시 miss/만료 → fetch
+//   - 캐시 miss/만료 → fetch (in-flight dedupe). 실패 시 stale 캐시가 STALE_MAX_MS 안이면 fallback.
 //   - fetch 후에도 kid 없으면 → (직전 fetch 직후라면) UnknownKid, 아니면 1회 강제 재fetch (rotation 대응)
 const resolveKey = async (issuer: string, kid: string): Promise<KeyObject> => {
   const now = Date.now()
@@ -104,12 +125,12 @@ const resolveKey = async (issuer: string, kid: string): Promise<KeyObject> => {
 
   if (entry === null || isExpired(entry, now)) {
     try {
-      entry = await fetchJwks(issuer)
+      entry = await fetchJwksDeduped(issuer)
       jwksCache = entry
       justFetched = true
     } catch (e) {
-      // stale 캐시가 있으면 fallback 시도
-      if (jwksCache !== null) {
+      // stale fallback — STALE_MAX_MS 안이어야. 넘으면 revoked key 우려라 throw.
+      if (jwksCache !== null && !isStaleBeyondMax(jwksCache, now)) {
         entry = jwksCache
       } else {
         throw e
@@ -123,7 +144,7 @@ const resolveKey = async (issuer: string, kid: string): Promise<KeyObject> => {
   // rotation: 캐시에 없으면 1회 강제 재fetch
   if (!justFetched) {
     try {
-      const fresh = await fetchJwks(issuer)
+      const fresh = await fetchJwksDeduped(issuer)
       jwksCache = fresh
       key = fresh.keys.get(kid)
       if (key !== undefined) return key
@@ -175,7 +196,10 @@ export const verifyOAuthToken = async (token: string): Promise<OAuthAuth> => {
 
   let decoded: jwt.JwtPayload
   try {
-    const result = jwt.verify(token, publicKey, { algorithms: ['RS256'] })
+    const result = jwt.verify(token, publicKey, {
+      algorithms: ['RS256'],
+      clockTolerance: CLOCK_TOLERANCE_SECONDS,
+    })
     if (typeof result === 'string' || result === null) {
       throw new OAuthTokenError('Invalid', 'unexpected string payload')
     }
@@ -199,9 +223,11 @@ export const verifyOAuthToken = async (token: string): Promise<OAuthAuth> => {
     )
   }
 
-  // RFC 8707: aud는 single string 가정 (Functions #189 합의)
-  const decodedAud = typeof decoded.aud === 'string' ? decoded.aud : ''
-  if (decodedAud !== expectedAudience) {
+  // RFC 7519 §4.1.3 / RFC 8707: aud는 string 또는 string[]. multi-RS 확장 대비.
+  const audMatches =
+    (typeof decoded.aud === 'string' && decoded.aud === expectedAudience) ||
+    (Array.isArray(decoded.aud) && decoded.aud.includes(expectedAudience))
+  if (!audMatches) {
     throw new OAuthTokenError(
       'AudienceMismatch',
       `access token audience does not match expected "${expectedAudience}"`,
@@ -214,11 +240,21 @@ export const verifyOAuthToken = async (token: string): Promise<OAuthAuth> => {
   }
 
   const scopes = parseScopes(decoded.scope)
+  const clientId = typeof decoded.client_id === 'string' ? decoded.client_id : undefined
 
-  return { userId: decodedSub, scopes }
+  return { userId: decodedSub, scopes, clientId }
 }
 
-// test-only: 모듈 스코프 캐시 초기화
+// test-only: 모듈 스코프 캐시 초기화.
+// production code가 부르면 throw — 우연 노출 방지.
 export const __resetJwksCacheForTest = (): void => {
+  const vitestFlag = process.env['VITEST']
+  const isTestEnv =
+    process.env['NODE_ENV'] === 'test' ||
+    (typeof vitestFlag === 'string' && vitestFlag !== '')
+  if (!isTestEnv) {
+    throw new Error('__resetJwksCacheForTest is for tests only')
+  }
   jwksCache = null
+  jwksInflight = null
 }

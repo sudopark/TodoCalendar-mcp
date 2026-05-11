@@ -17,6 +17,7 @@ type AuthedRequest = IncomingMessage & { auth?: AuthInfo }
 export type AuthMode = 'oauth' | 'dev'
 
 const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource'
+const MAX_BODY_BYTES = 1024 * 1024 // 1 MB — JSON-RPC body sanity cap
 
 // distinct scope set across the registry — RFC 9728 `scopes_supported`.
 // Derived once at module load (tools is frozen).
@@ -60,7 +61,7 @@ export interface HttpServerOptions {
    * 운영 배포 시 Cloud Run 호스트명을 반드시 주입.
    */
   allowedHosts?: string[]
-  /** auth pipeline 선택. dev → X-Dev-User-Id stub. oauth → Bearer + RS256 verify (env로 결정). */
+  /** auth pipeline 선택. dev → X-Dev-User-Id stub. oauth → Bearer + RS256 verify. */
   authMode?: AuthMode
   /** token `aud` 비교에 사용하는 본 server canonical URI + RFC 9728 `resource`. */
   canonicalUri?: string
@@ -72,18 +73,32 @@ export interface HttpServerOptions {
 const selectExtractor = (mode: AuthMode): AuthExtractor =>
   mode === 'dev' ? async (headers) => extractDevAuth(headers) : extractOAuthAuth
 
-// RFC 6750 §3.1 challenge. error/error_description 없는 형태는 단순 401 (token 누락 시 표준).
+// RFC 7235 quoted-string — `"`와 `\` 모두 escape 필수. 정보 손실 없이 안전화.
+const escapeQuotedString = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+
+interface Challenge {
+  error: string
+  description?: string
+  scope?: string
+}
+
 const buildWwwAuthenticate = (
   canonicalUri: string | undefined,
   metadataUrl: string | undefined,
-  challenge?: { error: string; description: string },
+  challenge?: Challenge,
 ): string => {
   const parts: string[] = []
-  if (canonicalUri !== undefined) parts.push(`realm="${canonicalUri}"`)
-  if (metadataUrl !== undefined) parts.push(`resource_metadata="${metadataUrl}"`)
+  if (canonicalUri !== undefined) parts.push(`realm="${escapeQuotedString(canonicalUri)}"`)
+  if (metadataUrl !== undefined)
+    parts.push(`resource_metadata="${escapeQuotedString(metadataUrl)}"`)
   if (challenge !== undefined) {
-    parts.push(`error="${challenge.error}"`)
-    parts.push(`error_description="${challenge.description.replace(/"/g, '')}"`)
+    parts.push(`error="${escapeQuotedString(challenge.error)}"`)
+    if (challenge.description !== undefined) {
+      parts.push(`error_description="${escapeQuotedString(challenge.description)}"`)
+    }
+    if (challenge.scope !== undefined) {
+      parts.push(`scope="${escapeQuotedString(challenge.scope)}"`)
+    }
   }
   return parts.length > 0 ? `Bearer ${parts.join(', ')}` : 'Bearer'
 }
@@ -98,6 +113,58 @@ const metadataUrlFrom = (canonicalUri: string | undefined): string | undefined =
   }
 }
 
+// JSON-RPC body 사전 파싱 — transport에 parsedBody로 전달 + scope enforce 사전 검증용.
+// MAX_BODY_BYTES 초과 시 reject (DoS sanity cap).
+const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let total = 0
+    req.on('data', (chunk: Buffer | string) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      total += buf.length
+      if (total > MAX_BODY_BYTES) {
+        req.destroy()
+        reject(new Error('request body too large'))
+        return
+      }
+      chunks.push(buf)
+    })
+    req.on('end', () => {
+      const text = Buffer.concat(chunks).toString('utf-8')
+      if (text === '') {
+        resolve(null)
+        return
+      }
+      try {
+        resolve(JSON.parse(text))
+      } catch (e) {
+        reject(e)
+      }
+    })
+    req.on('error', reject)
+  })
+}
+
+// JSON-RPC body에서 tools/call 인 호출들의 필요 scope 집합을 모음.
+// batch도 처리 (array body). 그 외 method(initialize, tools/list 등)는 scope 무관.
+const requiredScopesFor = (body: unknown): readonly string[] => {
+  if (body === null || typeof body !== 'object') return []
+  const items = Array.isArray(body) ? body : [body]
+  const acc = new Set<string>()
+  for (const item of items) {
+    if (item === null || typeof item !== 'object') continue
+    const rec = item as { method?: unknown; params?: unknown }
+    if (rec.method !== 'tools/call') continue
+    const params = rec.params as { name?: unknown } | undefined
+    const name = params?.name
+    if (typeof name !== 'string') continue
+    const tool = tools[name]
+    if (tool === undefined) continue
+    for (const s of tool.scopes) acc.add(s)
+  }
+  return [...acc]
+}
+
 // Stateless: spec/SDK가 권장하는 production 패턴 (SEP-1442 방향).
 // 매 POST 요청에 fresh Server+Transport를 만들고 res close 시 정리.
 // 세션 메모리 0, scale-out·serverless 친화적, session affinity 불필요.
@@ -108,42 +175,65 @@ const handleMcpPost = async (
   extractAuth: AuthExtractor,
 ): Promise<void> => {
   const metadataUrl = metadataUrlFrom(options.canonicalUri)
+
+  let auth: Awaited<ReturnType<AuthExtractor>>
   try {
-    const auth = await extractAuth(req.headers)
-    req.auth = {
-      token: 'dev', // SDK requires non-empty; verified upstream via extractor
-      clientId: 'mcp',
-      scopes: [...auth.scopes],
-      extra: { userId: auth.userId, scopes: auth.scopes },
-    }
+    auth = await extractAuth(req.headers)
   } catch (e) {
     if (e instanceof OAuthTokenError) {
       res.setHeader(
         'WWW-Authenticate',
         buildWwwAuthenticate(options.canonicalUri, metadataUrl, {
           error: 'invalid_token',
-          description: `${e.reason}: ${e.message}`,
         }),
       )
-      writeJson(res, 401, {
-        error: 'unauthorized',
-        reason: e.reason,
-        message: e.message,
-      })
+      writeJson(res, 401, { error: 'unauthorized' })
       return
     }
     if (e instanceof AuthRequiredError) {
       // token 누락은 RFC 6750 §3 권고 — error code 없이 challenge만.
-      // 형식 오류(non-Bearer 등)는 invalid_request로 분류 — 본 ticket은 단순화 위해
-      // AuthRequiredError 전부 token-absent로 처리 (LLM 클라가 발견 흐름 동일).
       res.setHeader(
         'WWW-Authenticate',
         buildWwwAuthenticate(options.canonicalUri, metadataUrl),
       )
-      writeJson(res, 401, { error: 'unauthorized', message: e.message })
+      writeJson(res, 401, { error: 'unauthorized' })
       return
     }
     throw e
+  }
+
+  let parsedBody: unknown
+  try {
+    parsedBody = await readJsonBody(req)
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    writeJson(res, 400, { error: 'invalid_request', message })
+    return
+  }
+
+  // RFC 6750 §3.1 scope enforce — transport 단계에서 403 + WWW-Authenticate.
+  // LLM client가 표준 흐름으로 scope 재인가 진행 가능.
+  const required = requiredScopesFor(parsedBody)
+  const missing = required.filter((s) => !auth.scopes.includes(s))
+  if (missing.length > 0) {
+    const scopeStr = missing.join(' ')
+    res.setHeader(
+      'WWW-Authenticate',
+      buildWwwAuthenticate(options.canonicalUri, metadataUrl, {
+        error: 'insufficient_scope',
+        description: 'token lacks required scope',
+        scope: scopeStr,
+      }),
+    )
+    writeJson(res, 403, { error: 'insufficient_scope' })
+    return
+  }
+
+  req.auth = {
+    token: 'verified', // placeholder — 실제 access token은 SDK 콘텍스트로 propagate 안 함 (CLAUDE.md §3)
+    clientId: auth.clientId ?? 'mcp',
+    scopes: [...auth.scopes],
+    extra: { userId: auth.userId },
   }
 
   const mcpServer = createMcpServer()
@@ -160,7 +250,7 @@ const handleMcpPost = async (
     mcpServer.close().catch(() => {})
   })
   await mcpServer.connect(transport)
-  await transport.handleRequest(req, res)
+  await transport.handleRequest(req, res, parsedBody)
 }
 
 const writeProtectedResourceMetadata = (
@@ -168,7 +258,8 @@ const writeProtectedResourceMetadata = (
   options: HttpServerOptions,
 ): void => {
   if (options.canonicalUri === undefined || options.issuer === undefined) {
-    writeJson(res, 404, { error: 'not_found' })
+    // config-incomplete — endpoint 자체는 존재하므로 NotFound가 아닌 ServiceUnavailable로.
+    writeJson(res, 503, { error: 'service_unavailable', message: 'auth metadata not configured' })
     return
   }
   writeJson(res, 200, {
@@ -223,15 +314,15 @@ const start = async (): Promise<void> => {
       '[warn] AUTH_MODE=dev — X-Dev-User-Id stub auth is for local development only. Do not deploy publicly.',
     )
   } else {
-    if (canonicalUri === undefined || canonicalUri === '') {
-      console.warn(
-        '[warn] AUTH_MODE=oauth but MCP_CANONICAL_URI unset — token `aud` validation will fail at first request',
+    // OAuth 모드 — env 누락이면 첫 요청에서 throw 되는데 그 전에 readiness gate에서 잡히도록 fail-fast.
+    const missing: string[] = []
+    if (canonicalUri === undefined || canonicalUri === '') missing.push('MCP_CANONICAL_URI')
+    if (issuer === undefined || issuer === '') missing.push('MCP_OAUTH_ISSUER')
+    if (missing.length > 0) {
+      console.error(
+        `[fatal] AUTH_MODE=oauth requires ${missing.join(', ')} — refusing to start without auth env configured`,
       )
-    }
-    if (issuer === undefined || issuer === '') {
-      console.warn(
-        '[warn] AUTH_MODE=oauth but MCP_OAUTH_ISSUER unset — token `iss` validation + JWKS fetch will fail at first request',
-      )
+      process.exit(1)
     }
   }
   if (process.env['NODE_ENV'] === 'production' && allowedHosts === undefined) {

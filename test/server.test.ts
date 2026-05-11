@@ -172,9 +172,11 @@ describe('auth gate', () => {
       body: '{}',
     })
     expect(res.status).toBe(401)
-    const body = (await res.json()) as { error: string; message: string }
+    const body = (await res.json()) as { error: string }
     expect(body.error).toBe('unauthorized')
-    expect(body.message).toMatch(/x-dev-user-id/i)
+    // body는 generic — 진단 정보(reason/message)는 로그로만 (token probe 신호 차단)
+    expect((body as Record<string, unknown>).reason).toBeUndefined()
+    expect((body as Record<string, unknown>).message).toBeUndefined()
   })
 
   it('POST /mcp with empty X-Dev-User-Id — 401 (빈 문자열도 reject)', async () => {
@@ -203,14 +205,16 @@ describe('GET /.well-known/oauth-protected-resource (RFC 9728)', () => {
     })
   })
 
-  it('env 없는 server — 404', async () => {
+  it('env 없는 server — 503 (config incomplete, NotFound 아님)', async () => {
     const stripped = createHttpServer({ authMode: 'dev' })
     await new Promise<void>((r) => stripped.listen(0, '127.0.0.1', r))
     const addr = stripped.address() as AddressInfo
     const stripUrl = `http://127.0.0.1:${addr.port}`
     try {
       const res = await fetch(`${stripUrl}/.well-known/oauth-protected-resource`)
-      expect(res.status).toBe(404)
+      expect(res.status).toBe(503)
+      const body = (await res.json()) as { error: string }
+      expect(body.error).toBe('service_unavailable')
     } finally {
       await new Promise<void>((r, j) => stripped.close((e) => (e ? j(e) : r())))
     }
@@ -260,7 +264,7 @@ describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1
     expect(res.headers.get('www-authenticate')).toMatch(/^Bearer\b/)
   })
 
-  it('만료 token — 401 + invalid_token + reason 보존', async () => {
+  it('만료 token — 401 + invalid_token (reason은 body에 노출 안 함)', async () => {
     verifyOAuthTokenMock.mockRejectedValue(new OAuthTokenError('Expired', 'access token expired'))
     const res = await fetch(`${oauthUrl}/mcp`, {
       method: 'POST',
@@ -270,12 +274,14 @@ describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1
     expect(res.status).toBe(401)
     const wwwAuth = res.headers.get('www-authenticate') ?? ''
     expect(wwwAuth).toMatch(/error="invalid_token"/)
-    expect(wwwAuth).toMatch(/error_description="Expired/)
-    const body = (await res.json()) as { reason: string; message: string }
-    expect(body.reason).toBe('Expired')
+    // reason discriminator는 외부 노출 안 함 — token probe 신호 차단
+    expect(wwwAuth).not.toMatch(/Expired/)
+    expect(wwwAuth).not.toMatch(/AudienceMismatch/)
+    const body = (await res.json()) as Record<string, unknown>
+    expect(body).toEqual({ error: 'unauthorized' })
   })
 
-  it('audience mismatch — 401 + invalid_token + reason=AudienceMismatch', async () => {
+  it('audience mismatch — 401 + invalid_token (구체 reason 미노출)', async () => {
     verifyOAuthTokenMock.mockRejectedValue(
       new OAuthTokenError('AudienceMismatch', 'audience mismatch'),
     )
@@ -286,7 +292,90 @@ describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1
     })
     expect(res.status).toBe(401)
     const wwwAuth = res.headers.get('www-authenticate') ?? ''
-    expect(wwwAuth).toMatch(/error_description="AudienceMismatch/)
+    expect(wwwAuth).toMatch(/error="invalid_token"/)
+    expect(wwwAuth).not.toMatch(/AudienceMismatch/)
+  })
+
+  it('read-only token으로 write tool 호출 — 403 + insufficient_scope + WWW-Authenticate scope param', async () => {
+    verifyOAuthTokenMock.mockResolvedValue({
+      userId: 'u-test',
+      scopes: ['read:calendar'],
+    })
+    const callBody = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'create_tag', arguments: { name: 'x', color_hex: '#fff' } },
+    }
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: 'Bearer x.y.z',
+      },
+      body: JSON.stringify(callBody),
+    })
+    expect(res.status).toBe(403)
+    const wwwAuth = res.headers.get('www-authenticate') ?? ''
+    expect(wwwAuth).toMatch(/error="insufficient_scope"/)
+    expect(wwwAuth).toMatch(/scope="write:calendar"/)
+    const body = (await res.json()) as Record<string, unknown>
+    expect(body).toEqual({ error: 'insufficient_scope' })
+  })
+
+  it('write token으로 read tool — 403 (정확 일치 요구)', async () => {
+    verifyOAuthTokenMock.mockResolvedValue({
+      userId: 'u-test',
+      scopes: ['write:calendar'],
+    })
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: 'Bearer x.y.z',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_tags', arguments: {} },
+      }),
+    })
+    expect(res.status).toBe(403)
+    expect(res.headers.get('www-authenticate') ?? '').toMatch(/scope="read:calendar"/)
+  })
+
+  it('initialize / tools/list — scope 무관, 어떤 scope set이든 통과', async () => {
+    verifyOAuthTokenMock.mockResolvedValue({ userId: 'u-1', scopes: [] })
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: 'Bearer x.y.z',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('batch에 scope 부족 호출 하나만 있어도 전체 403', async () => {
+    verifyOAuthTokenMock.mockResolvedValue({ userId: 'u-1', scopes: ['read:calendar'] })
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: 'Bearer x.y.z',
+      },
+      body: JSON.stringify([
+        { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_tags', arguments: {} } },
+        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'create_tag', arguments: { name: 'x', color_hex: '#fff' } } },
+      ]),
+    })
+    expect(res.status).toBe(403)
   })
 
   it('정상 token — auth gate 통과 (initialize 200)', async () => {

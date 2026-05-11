@@ -27,12 +27,12 @@ export type AuthResolver = (extra: McpRequestExtra) => Auth
  * tests catch it explicitly.
  */
 export const resolveAuthFromExtra: AuthResolver = (extra) => {
-  const extraRecord = extra.authInfo?.extra as { userId?: unknown; scopes?: unknown } | undefined
-  const userId = extraRecord?.userId
+  const userId = (extra.authInfo?.extra as { userId?: unknown } | undefined)?.userId
   if (typeof userId !== 'string' || userId === '') {
     throw new AuthInvariantError('extra.authInfo.extra.userId not populated')
   }
-  const scopesRaw = extraRecord?.scopes
+  // scopes는 SDK 표준 면(AuthInfo.scopes) 사용 — extra에 중복 저장 안 함.
+  const scopesRaw = extra.authInfo?.scopes
   const scopes = Array.isArray(scopesRaw)
     ? scopesRaw.filter((s): s is string => typeof s === 'string')
     : []
