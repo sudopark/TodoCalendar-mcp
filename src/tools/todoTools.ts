@@ -243,3 +243,74 @@ The 'origin' body field must be the full todo object (uuid, userId, name, etc.) 
     }
   },
 }
+
+const todoInputSchema = z
+  .object({
+    name: z.string().min(1).describe('Display name for the todo (non-empty).'),
+    event_tag_id: z.string().optional().describe('Optional tag uuid.'),
+    event_time: eventTimeSchema.optional().describe('Optional schedule.'),
+    repeating: repeatingSchema.optional().describe('Optional recurrence rule.'),
+    notification_options: z
+      .array(z.unknown())
+      .optional()
+      .describe('Optional notification config objects (opaque shape).'),
+  })
+  .describe('Todo creation payload — the owner is taken from the auth context; never pass userId.')
+
+const replaceTodoInput = z
+  .object({
+    todo_id: z.string().min(1).describe('UUID of the origin (repeating) todo to replace.'),
+    new: todoInputSchema.describe(
+      'Replacement todo payload (creates a new todo). Same shape as create_todo body.',
+    ),
+    origin_next_event_time: eventTimeSchema
+      .optional()
+      .describe(
+        "Optional. If the origin is repeating and should continue past this replacement, supply the EventTime of the origin's next occurrence — the origin is updated to that time. Omit to delete the origin entirely after replacement.",
+      ),
+  })
+  .describe(
+    "Body for replacing a repeating todo. Creates a 'new' todo and either advances the origin to 'origin_next_event_time' (if provided) or deletes it.",
+  )
+
+type ReplaceTodoInput = z.infer<typeof replaceTodoInput>
+
+const replaceTodoOutput = z
+  .object({
+    new_todo: todoSchema.describe('The newly created replacement todo.'),
+    next_repeating: todoSchema
+      .nullish()
+      .describe(
+        'The origin todo advanced to its next occurrence, when origin_next_event_time was supplied. Null/absent when the origin was deleted.',
+      ),
+  })
+  .describe('Result of replace_todo.')
+
+type ReplaceTodoOutput = z.infer<typeof replaceTodoOutput>
+
+export const replaceTodo: ToolDefinition<ReplaceTodoInput, ReplaceTodoOutput> = {
+  name: 'replace_todo',
+  description: `\
+Replace a repeating todo with a new one, choosing how the origin is treated.
+
+Decision guide for the agent:
+  - To replace a single occurrence of a repeating todo (other occurrences continue): set 'origin_next_event_time' to the next event_time of the origin so the origin advances past this turn.
+  - To replace the entire repeating series (no more occurrences from origin): omit 'origin_next_event_time' — the origin is deleted after the new todo is created.
+
+If you only want to modify fields on a non-repeating todo, prefer update_todo (PATCH) instead. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC).`,
+  inputSchema: replaceTodoInput,
+  outputSchema: replaceTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<ReplaceTodoOutput> => {
+    const { todo_id, ...body } = replaceTodoInput.parse(args)
+    try {
+      return await callOpenApi<ReplaceTodoOutput>(
+        auth,
+        'POST',
+        `/v2/open/todos/${encodeURIComponent(todo_id)}/replace`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
