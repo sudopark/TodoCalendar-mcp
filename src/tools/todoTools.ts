@@ -122,3 +122,55 @@ If 'event_time' is omitted the todo is created in 'current' mode (non-time-bound
     }
   },
 }
+
+const updateTodoInput = z
+  .object({
+    todo_id: z.string().min(1).describe('UUID of the todo to update.'),
+    name: z.string().optional().describe('New display name. Omit to keep unchanged.'),
+    event_tag_id: z
+      .string()
+      .optional()
+      .describe('Tag uuid to reassign this todo to. Omit to keep unchanged.'),
+    event_time: eventTimeSchema
+      .optional()
+      .describe('Replacement schedule. Omit to keep unchanged.'),
+    repeating: repeatingSchema
+      .optional()
+      .describe('Replacement recurrence rule. Omit to keep unchanged.'),
+    notification_options: z
+      .array(z.unknown())
+      .optional()
+      .describe('Replacement notification config objects (opaque shape). Omit to keep unchanged.'),
+  })
+  .describe(
+    'Partial update for an existing todo (PATCH). All body fields except todo_id are optional — only the fields you provide are applied.',
+  )
+
+type UpdateTodoInput = z.infer<typeof updateTodoInput>
+
+const updateTodoOutput = todoSchema
+
+type UpdateTodoOutput = z.infer<typeof updateTodoOutput>
+
+export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
+  name: 'update_todo',
+  description: `\
+Partially update a todo's fields (PATCH). Returns the full updated todo.
+
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC). For repeating-todo branching (split a recurrence into two), use the separate replace_todo tool instead.`,
+  inputSchema: updateTodoInput,
+  outputSchema: updateTodoOutput,
+  execute: async (auth: Auth, args: unknown): Promise<UpdateTodoOutput> => {
+    const { todo_id, ...body } = updateTodoInput.parse(args)
+    try {
+      return await callOpenApi<UpdateTodoOutput>(
+        auth,
+        'PATCH',
+        `/v2/open/todos/${encodeURIComponent(todo_id)}`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
