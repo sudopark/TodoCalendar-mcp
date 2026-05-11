@@ -4,6 +4,7 @@ import { tools } from '../../src/tools/index.js'
 describe('tools registry', () => {
   it('등록된 tool 모두 — 키는 각 tool의 name과 일치', () => {
     expect(Object.keys(tools).sort()).toEqual([
+      'complete_todo',
       'create_schedule',
       'create_tag',
       'create_todo',
@@ -12,7 +13,12 @@ describe('tools registry', () => {
       'get_schedules',
       'get_tags',
       'get_todos',
+      'revert_done_todo',
       'set_event_detail',
+      'update_done_todo',
+      'update_schedule',
+      'update_tag',
+      'update_todo',
     ])
   })
 
