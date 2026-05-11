@@ -94,3 +94,61 @@ Unlike todos, schedules require an 'event_time'. The 'event_time' field is a tag
     }
   },
 }
+
+const updateScheduleInput = z
+  .object({
+    schedule_id: z.string().min(1).describe('UUID of the schedule to update.'),
+    name: z.string().optional().describe('New display name. Omit to keep unchanged.'),
+    event_time: eventTimeSchema
+      .optional()
+      .describe('Replacement event_time. Omit to keep unchanged.'),
+    event_tag_id: z
+      .string()
+      .optional()
+      .describe('Tag uuid to reassign this schedule to. Omit to keep unchanged.'),
+    repeating: repeatingSchema
+      .optional()
+      .describe('Replacement recurrence rule. Omit to keep unchanged.'),
+    notification_options: z
+      .array(z.unknown())
+      .optional()
+      .describe('Replacement notification config objects (opaque shape). Omit to keep unchanged.'),
+    show_turns: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(
+        'Replacement per-occurrence visibility map (opaque key→value object). Omit to keep unchanged.',
+      ),
+  })
+  .describe(
+    'Partial update for an existing schedule (PATCH). All body fields except schedule_id are optional — only the fields you provide are applied.',
+  )
+
+type UpdateScheduleInput = z.infer<typeof updateScheduleInput>
+
+const updateScheduleOutput = scheduleSchema
+
+type UpdateScheduleOutput = z.infer<typeof updateScheduleOutput>
+
+export const updateSchedule: ToolDefinition<UpdateScheduleInput, UpdateScheduleOutput> = {
+  name: 'update_schedule',
+  description: `\
+Partially update a schedule's fields (PATCH). Returns the full updated schedule.
+
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC). For single-occurrence exclusion or repeating-branch operations, use the dedicated occurrence tools instead.`,
+  inputSchema: updateScheduleInput,
+  outputSchema: updateScheduleOutput,
+  execute: async (auth: Auth, args: unknown): Promise<UpdateScheduleOutput> => {
+    const { schedule_id, ...body } = updateScheduleInput.parse(args)
+    try {
+      return await callOpenApi<UpdateScheduleOutput>(
+        auth,
+        'PATCH',
+        `/v2/open/schedules/${encodeURIComponent(schedule_id)}`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
