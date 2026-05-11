@@ -152,3 +152,77 @@ Only the fields you include in the body are applied — omitted fields stay as-i
     }
   },
 }
+
+const scheduleInputSchema = z
+  .object({
+    name: z.string().min(1).describe('Display name for the schedule (non-empty).'),
+    event_time: eventTimeSchema.describe(
+      "Required. Tagged union by 'time_type' ('at' | 'period' | 'allday').",
+    ),
+    event_tag_id: z.string().optional().describe('Optional tag uuid.'),
+    repeating: repeatingSchema.optional().describe('Optional recurrence rule.'),
+    notification_options: z
+      .array(z.unknown())
+      .optional()
+      .describe('Optional notification config objects (opaque shape).'),
+    show_turns: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Optional per-occurrence visibility map (opaque key→value object).'),
+  })
+  .describe(
+    'Schedule creation payload — the owner is taken from the auth context; never pass userId.',
+  )
+
+const excludeScheduleOccurrenceInput = z
+  .object({
+    schedule_id: z.string().min(1).describe('UUID of the repeating schedule.'),
+    exclude_repeatings: z
+      .number()
+      .describe(
+        `Timestamp (${TS_SEC}) of the single occurrence to exclude. Must be one of the origin's repeating occurrence start times.`,
+      ),
+  })
+  .describe(
+    'Body for excluding one occurrence of a repeating schedule. The origin schedule is updated in place — its `exclude_repeatings` array grows by one entry.',
+  )
+
+type ExcludeScheduleOccurrenceInput = z.infer<typeof excludeScheduleOccurrenceInput>
+
+const excludeScheduleOccurrenceOutput = scheduleSchema
+
+type ExcludeScheduleOccurrenceOutput = z.infer<typeof excludeScheduleOccurrenceOutput>
+
+export const excludeScheduleOccurrence: ToolDefinition<
+  ExcludeScheduleOccurrenceInput,
+  ExcludeScheduleOccurrenceOutput
+> = {
+  name: 'exclude_schedule_occurrence',
+  description: `\
+Skip a single occurrence of a repeating schedule, leaving the rest of the recurrence intact. Returns the updated origin schedule (with the timestamp added to its 'exclude_repeatings').
+
+Decision guide for the agent:
+  - Use this when the user wants to cancel/skip just one occurrence and keep the recurrence as-is.
+  - To replace that occurrence with a one-off schedule (different fields), use replace_schedule_occurrence instead.
+  - To cut the recurrence at a point and start a new series, use branch_schedule_repeating.
+
+All timestamps are Unix epoch seconds (UTC).`,
+  inputSchema: excludeScheduleOccurrenceInput,
+  outputSchema: excludeScheduleOccurrenceOutput,
+  execute: async (
+    auth: Auth,
+    args: unknown,
+  ): Promise<ExcludeScheduleOccurrenceOutput> => {
+    const { schedule_id, ...body } = excludeScheduleOccurrenceInput.parse(args)
+    try {
+      return await callOpenApi<ExcludeScheduleOccurrenceOutput>(
+        auth,
+        'PATCH',
+        `/v2/open/schedules/${encodeURIComponent(schedule_id)}/exclude`,
+        body,
+      )
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
