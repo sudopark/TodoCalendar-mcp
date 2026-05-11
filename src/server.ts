@@ -19,6 +19,10 @@ export type AuthMode = 'oauth' | 'dev'
 const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource'
 const MAX_BODY_BYTES = 1024 * 1024 // 1 MB — JSON-RPC body sanity cap
 
+class BodyTooLargeError extends Error {
+  override readonly name = 'BodyTooLargeError'
+}
+
 // distinct scope set across the registry — RFC 9728 `scopes_supported`.
 // Derived once at module load (tools is frozen).
 const SUPPORTED_SCOPES: readonly string[] = [
@@ -114,22 +118,30 @@ const metadataUrlFrom = (canonicalUri: string | undefined): string | undefined =
 }
 
 // JSON-RPC body 사전 파싱 — transport에 parsedBody로 전달 + scope enforce 사전 검증용.
-// MAX_BODY_BYTES 초과 시 reject (DoS sanity cap).
+// MAX_BODY_BYTES 초과는 `BodyTooLargeError`로 별도 분류 (413 응답 매핑 위해).
+// settled flag로 first-settle wins 명시 — destroy 후 추가 이벤트 dead-loop 차단.
 const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let total = 0
+    let settled = false
     req.on('data', (chunk: Buffer | string) => {
+      if (settled) return
       const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
       total += buf.length
       if (total > MAX_BODY_BYTES) {
-        req.destroy()
-        reject(new Error('request body too large'))
+        settled = true
+        reject(new BodyTooLargeError('request body too large'))
+        // req.destroy()는 안 함 — client가 보내고 있는 동안 socket을 끊으면
+        // client side에서 응답 헤더를 받기 전에 socket close라 'fetch failed' 처리됨.
+        // 응답이 client에 도달할 수 있게 stream은 자연 종료까지 두고 body만 chunks에 넣지 않음.
         return
       }
       chunks.push(buf)
     })
     req.on('end', () => {
+      if (settled) return
+      settled = true
       const text = Buffer.concat(chunks).toString('utf-8')
       if (text === '') {
         resolve(null)
@@ -141,7 +153,11 @@ const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
         reject(e)
       }
     })
-    req.on('error', reject)
+    req.on('error', (e) => {
+      if (settled) return
+      settled = true
+      reject(e)
+    })
   })
 }
 
@@ -206,8 +222,20 @@ const handleMcpPost = async (
   try {
     parsedBody = await readJsonBody(req)
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    writeJson(res, 400, { error: 'invalid_request', message })
+    // JSON-RPC 2.0 envelope으로 응답 — SDK가 직접 파싱했을 때와 contract 통일.
+    if (e instanceof BodyTooLargeError) {
+      writeJson(res, 413, {
+        jsonrpc: '2.0',
+        error: { code: -32600, message: 'request body too large' },
+        id: null,
+      })
+      return
+    }
+    writeJson(res, 400, {
+      jsonrpc: '2.0',
+      error: { code: -32700, message: 'Parse error: invalid JSON' },
+      id: null,
+    })
     return
   }
 

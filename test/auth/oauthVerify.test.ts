@@ -374,6 +374,37 @@ describe('JWKS cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('stale fallback 후 unknown kid → rotation 재fetch 건너뜀', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+
+    let callCount = 0
+    const fetchMock = vi.fn(async () => {
+      callCount += 1
+      if (callCount === 1) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => jwksBodyFor([kpA]),
+        } as Response
+      }
+      throw new Error('network down')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const tokenA = signToken(kpA, { sub: 'u-1', expiresIn: 60 * 60 * 2 })
+    await verifyOAuthToken(tokenA) // 캐시 적재 (kpA)
+    expect(callCount).toBe(1)
+
+    // TTL 만료 후 kpB token → stale fallback 진입 → cache에 kpB 없음 → UnknownKid
+    // (방금 실패한 endpoint를 rotation으로 다시 두드리는 거 의미 없으니 skip)
+    vi.setSystemTime(new Date('2026-01-01T00:05:01Z'))
+    const tokenB = signToken(kpB, { sub: 'u-2' })
+    await expect(verifyOAuthToken(tokenB)).rejects.toMatchObject({ reason: 'UnknownKid' })
+    expect(callCount).toBe(2) // initial + TTL 만료 시 1번. rotation 발사 X.
+  })
+
   it('stale 캐시 max-age 초과 + fetch 실패 → Invalid (revoked key 보호)', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))

@@ -378,6 +378,44 @@ describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1
     expect(res.status).toBe(403)
   })
 
+  it('invalid JSON body — 400 + JSON-RPC parse error envelope', async () => {
+    verifyOAuthTokenMock.mockResolvedValue({ userId: 'u-1', scopes: ['read:calendar'] })
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer x.y.z' },
+      body: '{not json',
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as {
+      jsonrpc: string
+      error: { code: number; message: string }
+      id: unknown
+    }
+    expect(body.jsonrpc).toBe('2.0')
+    expect(body.error.code).toBe(-32700)
+    expect(body.error.message).toMatch(/parse error/i)
+    expect(body.id).toBeNull()
+  })
+
+  it('body too large (1MB 초과) — 413 + JSON-RPC envelope', async () => {
+    verifyOAuthTokenMock.mockResolvedValue({ userId: 'u-1', scopes: ['read:calendar'] })
+    // 1.1MB payload
+    const big = 'x'.repeat(1024 * 1024 + 1024)
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer x.y.z' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: { pad: big } }),
+    })
+    expect(res.status).toBe(413)
+    const body = (await res.json()) as {
+      jsonrpc: string
+      error: { code: number; message: string }
+    }
+    expect(body.jsonrpc).toBe('2.0')
+    expect(body.error.code).toBe(-32600)
+    expect(body.error.message).toMatch(/too large/i)
+  })
+
   it('정상 token — auth gate 통과 (initialize 200)', async () => {
     verifyOAuthTokenMock.mockResolvedValue({
       userId: 'oauth-user-1',
