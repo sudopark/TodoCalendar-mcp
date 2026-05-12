@@ -44,8 +44,8 @@ beforeEach(() => {
   openApiSpy.lastBody = undefined
   openApiSpy.callCount = 0
   openApiSpy.responseError = null
-  // happy-path default — empty page, no next cursor
-  openApiSpy.responsePayload = { dones: [], next_cursor: null }
+  // happy-path default — empty array (swagger: response is `DoneTodo[]`)
+  openApiSpy.responsePayload = []
 })
 
 describe('get_done_todos', () => {
@@ -68,7 +68,7 @@ describe('get_done_todos', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=20&cursor=1700000000')
   })
 
-  it('cursor=null — round-trip 허용 (이전 응답의 next_cursor=null을 그대로 전달 가능)', async () => {
+  it('cursor=null — round-trip 허용 (이전 응답의 cursor=null을 그대로 전달 가능)', async () => {
     await getDoneTodos.execute(auth, { size: 20, cursor: null })
 
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=20')
@@ -96,18 +96,15 @@ describe('get_done_todos', () => {
     expect(openApiSpy.callCount).toBe(0)
   })
 
-  it('raw 응답 통과 — done_at·next_cursor 보존', async () => {
-    const raw = {
-      dones: [
-        {
-          uuid: 'd-1',
-          userId: 'u-1',
-          name: '완료',
-          done_at: 1_700_000_000,
-        },
-      ],
-      next_cursor: 1_699_000_000,
-    }
+  it('raw 응답 통과 — DoneTodo[] 배열 그대로', async () => {
+    const raw = [
+      {
+        uuid: 'd-1',
+        userId: 'u-1',
+        name: '완료',
+        done_at: 1_700_000_000,
+      },
+    ]
     openApiSpy.responsePayload = raw
 
     const result = await getDoneTodos.execute(auth, { size: 1 })

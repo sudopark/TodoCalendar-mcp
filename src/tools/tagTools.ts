@@ -23,7 +23,7 @@ export const getTags: ToolDefinition<GetTagsInput, GetTagsOutput> = {
   execute: async (auth: Auth, args: unknown): Promise<GetTagsOutput> => {
     getTagsInput.parse(args)
     try {
-      return await callOpenApi<GetTagsOutput>(auth, 'GET', '/v2/open/tags/all')
+      return await callOpenApi<GetTagsOutput>(auth, 'GET', '/v2/open/tags/')
     } catch (e) {
       return wrapOpenApiError(e)
     }
