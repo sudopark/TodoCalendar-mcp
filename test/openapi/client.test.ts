@@ -158,19 +158,19 @@ describe('callOpenApi — 응답 처리', () => {
 
   it('비표준 4xx body (HTML 등) — OpenApiError 폴백', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('<html>500</html>', { status: 502 }),
+      new Response('<html>400</html>', { status: 400 }),
     )
     await expect(callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x')).rejects.toMatchObject({
-      status: 502,
+      status: 400,
       code: 'Unknown',
     })
   })
 
   it('빈 body 4xx — OpenApiError 폴백', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 500 }))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 400 }))
     const err = await callOpenApi({ userId: 'u', scopes: ['read:calendar', 'write:calendar'] }, 'GET', '/x').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(OpenApiError)
-    expect((err as OpenApiError).status).toBe(500)
+    expect((err as OpenApiError).status).toBe(400)
   })
 
   it('2xx + 빈 body — EmptyBody 에러로 throw (success body invariant 강제)', async () => {
@@ -282,8 +282,8 @@ describe('callOpenApi — 재시도 (멱등 메소드만)', () => {
 
   it('GET 5xx 3회 (최대 시도 모두 실패) — 마지막 응답 mapOpenApiError로 propagate', async () => {
     const body = JSON.stringify({ status: 503, code: 'ServiceUnavailable', message: 'down' })
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(body, { status: 503 }),
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () => new Response(body, { status: 503 }),
     )
 
     await expect(callOpenApi(USER, 'GET', '/x')).rejects.toMatchObject({
@@ -364,7 +364,7 @@ describe('callOpenApi — 재시도 (멱등 메소드만)', () => {
     'RETRY_COUNT 잘못된 값 (%s) — default 2 fallback (총 3회)',
     async (bad) => {
       vi.stubEnv('OPENAPI_RETRY_COUNT', bad)
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(resp500())
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => resp500())
 
       await expect(callOpenApi(USER, 'GET', '/x')).rejects.toMatchObject({ status: 503 })
       expect(fetchSpy).toHaveBeenCalledTimes(3)
@@ -374,7 +374,7 @@ describe('callOpenApi — 재시도 (멱등 메소드만)', () => {
   it('backoff sleep — 시도 사이마다 호출, attempt 증가에 따라 ms 증가', async () => {
     if (__callOpenApiInternalsForTest === undefined) throw new Error('no internals')
     const sleepSpy = vi.spyOn(__callOpenApiInternalsForTest, 'sleep').mockResolvedValue()
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(resp500())
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => resp500())
 
     await expect(callOpenApi(USER, 'GET', '/x')).rejects.toBeDefined()
     expect(sleepSpy).toHaveBeenCalledTimes(2)

@@ -76,7 +76,13 @@ const fetchWithTimeout = async (
   timeoutMs: number,
 ): Promise<Response> => {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const timer = setTimeout(
+    () =>
+      controller.abort(
+        new DOMException(`openAPI fetch timed out after ${timeoutMs}ms`, 'AbortError'),
+      ),
+    timeoutMs,
+  )
   try {
     return await fetch(url, { ...init, signal: controller.signal })
   } finally {
@@ -112,7 +118,6 @@ export const callOpenApi = async <T>(
   const canRetry = isRetriableMethod(method)
   const maxAttempts = canRetry ? retryCount + 1 : 1
 
-  let lastError: unknown
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     let res: Response
     try {
@@ -125,14 +130,13 @@ export const callOpenApi = async <T>(
           `openAPI request timed out after ${timeoutMs}ms`,
         )
       }
-      lastError = err
       if (!canRetry || attempt === maxAttempts - 1) throw err
       await internals.sleep(computeBackoffMs(attempt))
       continue
     }
 
     if (res.status >= 500 && canRetry && attempt < maxAttempts - 1) {
-      lastError = res
+      await res.body?.cancel().catch(() => {})
       await internals.sleep(computeBackoffMs(attempt))
       continue
     }
@@ -149,5 +153,5 @@ export const callOpenApi = async <T>(
     return parsed as T
   }
 
-  throw lastError ?? new OpenApiError(0, 'Unknown', 'openAPI request failed after retries')
+  throw new OpenApiError(0, 'Unreachable', 'openAPI retry loop exited without resolution')
 }
