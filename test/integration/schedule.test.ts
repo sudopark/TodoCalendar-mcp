@@ -2,11 +2,13 @@ import type { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 import {
   branchScheduleRepeating,
+  branchScheduleRepeatingOutput,
   createSchedule,
   deleteSchedule,
   excludeScheduleOccurrence,
   getSchedules,
   replaceScheduleOccurrence,
+  replaceScheduleOccurrenceOutput,
   updateSchedule,
 } from '../../src/tools/scheduleTools.js'
 import type { scheduleSchema } from '../../src/tools/shared/schemas.js'
@@ -16,16 +18,19 @@ import { makeIntegrationAuth } from './_setup/auth.js'
 const readiness = await checkReadiness()
 warnIfSkipping('schedule', readiness)
 
-// [리뷰 #30 옵션 2번] inline 5필드 cast 대신 schema 면에 묶음 — schema 확장 시 자동 추종.
+// [리뷰 #33 옵션 2번] inline 다필드 cast 대신 schema 면에 묶음 — schema 확장 시 자동 추종.
 type Schedule = z.infer<typeof scheduleSchema>
+type ReplaceScheduleResult = z.infer<typeof replaceScheduleOccurrenceOutput>
+type BranchScheduleResult = z.infer<typeof branchScheduleRepeatingOutput>
 
-// schedule은 todo와 달리 event_time 필수. 기본 시간 fixture 헬퍼.
-const T1 = 1_700_000_000
-const T2 = 1_700_003_600
-const atTime = (timestamp: number) =>
-  ({ time_type: 'at' as const, timestamp }) as const
-const dailyFrom = (start: number) =>
-  ({ start, option: { optionType: 'every_day', interval: 1 } }) as const
+// schedule은 todo와 달리 event_time 필수. 기본 시간 fixture.
+const T1 = 1_700_000_000 // 2023-11-14T22:13:20Z (UTC) — fixture epoch
+const NEXT_OCCURRENCE = T1 + 86_400 // daily 룰의 다음 occurrence start (T1+1day)
+const atTime = (timestamp: number) => ({ time_type: 'at' as const, timestamp })
+const dailyFrom = (start: number) => ({
+  start,
+  option: { optionType: 'every_day' as const, interval: 1 },
+})
 
 describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
   it('create_schedule — 새 schedule 생성 후 uuid·userId 반환', async () => {
@@ -64,7 +69,10 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     expect(updated.name).toBe('after')
   })
 
-  it('exclude_schedule_occurrence — 반복 schedule의 1개 occurrence skip', async () => {
+  it('exclude_schedule_occurrence — daily 룰의 occurrence 정렬 timestamp를 exclude', async () => {
+    // daily 룰 occurrence: T1, T1+86400, T1+86400*2, ...
+    // tool description "Must be one of the origin's repeating occurrence start times" 준수 —
+    // 임의 timestamp가 아닌 실제 occurrence start로 호출해야 의미 있는 회귀.
     const auth = makeIntegrationAuth()
     const origin = (await createSchedule.execute(auth, {
       name: 'repeating-origin',
@@ -74,13 +82,15 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
 
     const result = (await excludeScheduleOccurrence.execute(auth, {
       schedule_id: origin.uuid,
-      exclude_repeatings: T2,
+      exclude_repeatings: NEXT_OCCURRENCE,
     })) as Schedule
     expect(result.uuid).toBe(origin.uuid)
-    expect(result.exclude_repeatings).toEqual(expect.arrayContaining([T2]))
+    expect(result.exclude_repeatings).toEqual(expect.arrayContaining([NEXT_OCCURRENCE]))
   })
 
-  it('replace_schedule_occurrence — 1개 occurrence를 one-off로 교체', async () => {
+  it('replace_schedule_occurrence — daily 룰의 occurrence 정렬 슬롯을 one-off로 교체', async () => {
+    // exclude_repeatings는 origin의 occurrence start와 일치해야 하고, new.event_time도
+    // 그 슬롯 자리여야 '교체' 의미가 살아남. 둘 다 NEXT_OCCURRENCE로 정렬.
     const auth = makeIntegrationAuth()
     const origin = (await createSchedule.execute(auth, {
       name: 'repeating-origin',
@@ -90,16 +100,21 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
 
     const result = (await replaceScheduleOccurrence.execute(auth, {
       schedule_id: origin.uuid,
-      new: { name: 'one-off-replacement', event_time: atTime(T2) },
-      exclude_repeatings: T2,
-    })) as { updated_origin: Schedule; new_schedule: Schedule }
+      new: { name: 'one-off-replacement', event_time: atTime(NEXT_OCCURRENCE) },
+      exclude_repeatings: NEXT_OCCURRENCE,
+    })) as ReplaceScheduleResult
     expect(result.updated_origin.uuid).toBe(origin.uuid)
-    expect(result.updated_origin.exclude_repeatings).toEqual(expect.arrayContaining([T2]))
+    expect(result.updated_origin.exclude_repeatings).toEqual(
+      expect.arrayContaining([NEXT_OCCURRENCE]),
+    )
     expect(result.new_schedule.name).toBe('one-off-replacement')
   })
 
-  // branch_schedule_repeating은 openAPI 측에서 현재 500 반환 (TodoCalendar-Functions#178).
-  // 업스트림 fix 머지 후 it.skip 제거 + happy path 검증 enable.
+  // [리뷰 #33 권장 trade-off] it.skip 유지 — happy path 의도(spec)를 코드에 남긴다는 게
+  // 가치 큼. reality 가드(`expect(...).rejects.toMatchObject({status:500})`)로 가는
+  // 대안도 있으나, 머지 시점에 happy path 자체를 검증 못 하면 fix 후 별도 PR로 갈아끼우는
+  // 비용이 같음. it.skip은 enable 시점에 단순히 `.skip` 제거만 하면 그대로 동작 가능.
+  // Functions#178 머지 후 it.skip 제거 + happy path 검증 enable.
   it.skip('branch_schedule_repeating — Functions#178 머지 후 enable', async () => {
     const auth = makeIntegrationAuth()
     const origin = (await createSchedule.execute(auth, {
@@ -110,9 +125,9 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
 
     const result = (await branchScheduleRepeating.execute(auth, {
       schedule_id: origin.uuid,
-      new: { name: 'branch-weekly', event_time: atTime(T2) },
-      end_time: T2,
-    })) as { new: Schedule; origin: Schedule }
+      new: { name: 'branch-weekly', event_time: atTime(NEXT_OCCURRENCE) },
+      end_time: NEXT_OCCURRENCE,
+    })) as BranchScheduleResult
     expect(result.new.name).toBe('branch-weekly')
     expect(result.origin.uuid).toBe(origin.uuid)
   })
@@ -126,6 +141,7 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
 
     const step1 = (await deleteSchedule.execute(auth, { schedule_id: created.uuid })) as {
       status: string
+      message: string
       confirmToken: string
       action: string
       target: { schedule_id: string }
@@ -134,6 +150,9 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     expect(step1.action).toBe('delete_schedule')
     expect(step1.target).toEqual({ schedule_id: created.uuid })
     expect(typeof step1.confirmToken).toBe('string')
+    // schedule만의 차별 안전 신호 — '반복 occurrence 전체 삭제'를 LLM이 사용자에게 경고하도록
+    // tool description에 박혀 있는 문구. 회귀로 잡아둠.
+    expect(step1.message).toContain('and all of its occurrences')
 
     const step2 = (await deleteSchedule.execute(auth, {
       schedule_id: created.uuid,
