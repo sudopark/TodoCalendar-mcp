@@ -7,8 +7,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/integration/**/*.test.ts'],
-    // Firestore에 순차로 쓰는 시나리오(CONFIRM 2단계 등)가 있어 동시 실행은 피한다.
-    // 격리는 unique userId로 해결하지만 동일 user 내 이벤트 순서는 보장 필요.
+    // 여러 통합 테스트 파일이 동시에 emulator를 두드리면 firestore write 부하·flakiness
+    // 가능 + 실패 시 어느 파일이 원인인지 추적 어려움. 파일 단위 직렬로 단순화
+    // (it 간 격리는 unique userId가 별도 보장 — pool/fileParallelism은 user 격리와 무관).
     pool: 'forks',
     fileParallelism: false,
     testTimeout: 15_000,
