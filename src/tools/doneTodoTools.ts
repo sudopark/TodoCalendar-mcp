@@ -29,10 +29,10 @@ const getDoneTodosInput = z
       .number()
       .nullish()
       .describe(
-        'Opaque pagination cursor — pass the `next_cursor` value from the previous response to fetch the next page. Omit on the first call. Null is also accepted (treated as no cursor) so that callers can round-trip the response value verbatim.',
+        "Pagination cursor (Unix epoch seconds) — pass the last returned item's `done_at` to fetch items strictly older than that timestamp. Omit on the first call. Null is accepted (treated as no cursor) for round-trip convenience.",
       ),
   })
-  .describe('Page size and optional pagination cursor (from the previous response\'s `next_cursor`).')
+  .describe("Page size and optional pagination cursor (last item's done_at on the previous page).")
 
 type GetDoneTodosInput = z.infer<typeof getDoneTodosInput>
 

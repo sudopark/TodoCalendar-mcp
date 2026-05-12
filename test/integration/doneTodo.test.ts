@@ -23,6 +23,8 @@ type GetDoneTodosResult = z.infer<typeof getDoneTodosOutput>
 type RevertDoneTodoResult = z.infer<typeof revertDoneTodoOutput>
 
 // done-todo는 active todo를 complete해서 만든다. 각 it의 fixture로 한 줄 헬퍼.
+// 의존: createTodo / completeTodo — 이 둘 중 하나가 회귀하면 doneTodo it 전체가 cascade fail.
+// 의식적 trade-off (swagger 면을 우회하는 raw firestore write 대신 정규 호출).
 const seedDoneTodo = async (auth: Auth, name: string): Promise<DoneTodo> => {
   const created = (await createTodo.execute(auth, { name })) as Todo
   const completed = (await completeTodo.execute(auth, {
@@ -53,10 +55,10 @@ describe.skipIf(!readiness.ready)('integration: done-todo happy path', () => {
     expect(updated.name).toBe('after-update')
   })
 
-  it('revert_done_todo — done을 active todo로 복귀 (todo 객체 반환)', async () => {
+  it('revert_done_todo — done을 active todo로 복귀 (auth user 면 round-trip)', async () => {
     // NOTE: Functions emulator의 revertDoneTodoV2가 응답 todo.name을 누락하고 있음
-    // (swagger상 Todo.name은 required). 회귀 가드는 todo.uuid 발급 여부로 약화 —
-    // upstream fix 후 이 it의 name 검증 복원 가능.
+    // (swagger상 Todo.name은 required). 회귀 가드는 userId round-trip으로 대체 —
+    // auth 컨텍스트가 todo에 박혀 제대로 돌아오는지 검증. upstream fix 후 name 검증 복원.
     const auth = makeIntegrationAuth()
     const done = await seedDoneTodo(auth, 'to-revert')
 
@@ -64,7 +66,7 @@ describe.skipIf(!readiness.ready)('integration: done-todo happy path', () => {
       done_todo_id: done.uuid,
     })) as RevertDoneTodoResult
     expect(typeof result.todo.uuid).toBe('string')
-    expect(result.todo.uuid).not.toBe(done.uuid) // active todo는 done과 다른 새 uuid
+    expect(result.todo.userId).toBe(auth.userId)
   })
 
   it('delete_done_todo — status:ok 반환', async () => {
