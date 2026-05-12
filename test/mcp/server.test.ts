@@ -218,13 +218,51 @@ describe('mcp server — tools/call', () => {
     expect(result._meta).toEqual({ code: 'UnknownTool', status: 404 })
   })
 
-  it('zod validation 실패 — isError + 메시지, openapi 미호출', async () => {
+  it('zod validation 실패 — InvalidParameter(400) + 자연어 메시지, openapi 미호출', async () => {
     const { client } = await wireServer()
 
     const result = await client.callTool({ name: 'get_todos', arguments: {} })
 
     expect(result.isError).toBe(true)
+    expect(result._meta).toEqual({ code: 'InvalidParameter', status: 400 })
     expect(openApiSpy.callCount).toBe(0)
+
+    // 메시지가 raw zod issue array (JSON 문자열)이 아닌 자연어로 가공돼야 함
+    const text = (result.content as Array<{ text: string }>)[0]!.text
+    const payload = JSON.parse(text)
+    expect(payload.code).toBe('InvalidParameter')
+    expect(payload.message).not.toMatch(/^\[/) // raw JSON 배열 시작 차단
+  })
+
+  it('zod validation 실패 — 타입 오류 시 path + message 자연어 노출', async () => {
+    const { client } = await wireServer()
+
+    const result = await client.callTool({ name: 'create_tag', arguments: { name: 42 } })
+
+    expect(result.isError).toBe(true)
+    expect(result._meta).toEqual({ code: 'InvalidParameter', status: 400 })
+    const text = (result.content as Array<{ text: string }>)[0]!.text
+    const payload = JSON.parse(text)
+    expect(payload.message).toContain('name:')
+    expect(payload.message.toLowerCase()).toContain('string')
+    expect(openApiSpy.callCount).toBe(0)
+  })
+
+  it('zod validation 실패 — 다중 위반 시 한 메시지에 모두 포함 (세미콜론 join)', async () => {
+    const { client } = await wireServer()
+
+    const result = await client.callTool({
+      name: 'create_tag',
+      arguments: { name: '', color_hex: 12345 },
+    })
+
+    expect(result.isError).toBe(true)
+    expect(result._meta).toEqual({ code: 'InvalidParameter', status: 400 })
+    const text = (result.content as Array<{ text: string }>)[0]!.text
+    const payload = JSON.parse(text)
+    expect(payload.message).toContain('name:')
+    expect(payload.message).toContain('color_hex:')
+    expect(payload.message).toContain('; ')
   })
 
   it('OpenApiError(InvalidParameter) → ToolError로 wrap, _meta에 code/status', async () => {
