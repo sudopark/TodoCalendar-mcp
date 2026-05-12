@@ -49,11 +49,11 @@ beforeEach(() => {
 })
 
 describe('get_tags', () => {
-  it('GET /v2/open/tags/all 호출, 인자 없음', async () => {
+  it('GET /v2/open/tags/ 호출, 인자 없음', async () => {
     await getTags.execute(auth, {})
 
     expect(openApiSpy.lastMethod).toBe('GET')
-    expect(openApiSpy.lastPath).toBe('/v2/open/tags/all')
+    expect(openApiSpy.lastPath).toBe('/v2/open/tags/')
   })
 
   it('raw 응답 — userId·color_hex 보존', async () => {
@@ -72,7 +72,7 @@ describe('get_tags', () => {
     await getTags.execute(auth, { userId: 'attacker' })
 
     expect(openApiSpy.lastAuth).toBe(auth)
-    expect(openApiSpy.lastPath).toBe('/v2/open/tags/all')
+    expect(openApiSpy.lastPath).toBe('/v2/open/tags/')
   })
 
   it('InsufficientScope → ToolError', async () => {

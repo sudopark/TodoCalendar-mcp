@@ -153,7 +153,7 @@ describe('mcp server — tools/call', () => {
     expect(result.structuredContent).toBeUndefined()
     expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(raw) }])
     expect(openApiSpy.lastAuth).toEqual(auth)
-    expect(openApiSpy.lastPath).toBe('/v2/open/tags/all')
+    expect(openApiSpy.lastPath).toBe('/v2/open/tags/')
   })
 
   it('get_event_details — object 응답, structuredContent에 raw 그대로', async () => {

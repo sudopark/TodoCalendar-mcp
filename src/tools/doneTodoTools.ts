@@ -36,15 +36,11 @@ const getDoneTodosInput = z
 
 type GetDoneTodosInput = z.infer<typeof getDoneTodosInput>
 
-const getDoneTodosOutput = z
-  .object({
-    dones: z.array(doneTodoSchema),
-    next_cursor: z
-      .number()
-      .nullish()
-      .describe('Pass back as `cursor` to fetch the next page. Null/absent when no more pages.'),
-  })
-  .describe('Paginated list of completed todos.')
+export const getDoneTodosOutput = z
+  .array(doneTodoSchema)
+  .describe(
+    'Done todos ordered by done_at desc. For pagination, pass the last item\'s done_at as `cursor` on the next call. When the returned array length is < size, no more pages.',
+  )
 
 type GetDoneTodosOutput = z.infer<typeof getDoneTodosOutput>
 
@@ -54,7 +50,7 @@ export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput>
   description: `\
 Fetch completed (done) todos for the authenticated user, ordered by completion time (newest first), paginated by cursor.
 
-Use 'cursor' to fetch the next page — pass the 'next_cursor' value from the previous response. All timestamps in the response are Unix epoch seconds (UTC).`,
+Response is an array of done todos. For pagination, pass the last item's 'done_at' as 'cursor' on the next call (cursor is excluded — items strictly older than cursor are returned). When the returned array length is less than 'size', there are no more pages. All timestamps in the response are Unix epoch seconds (UTC).`,
   inputSchema: getDoneTodosInput,
   outputSchema: getDoneTodosOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetDoneTodosOutput> => {
@@ -132,7 +128,7 @@ const revertDoneTodoInput = z
 
 type RevertDoneTodoInput = z.infer<typeof revertDoneTodoInput>
 
-const revertDoneTodoOutput = z
+export const revertDoneTodoOutput = z
   .object({
     todo: todoSchema.describe('The newly-activated todo created from the reverted done-todo.'),
     detail: eventDetailSchema
