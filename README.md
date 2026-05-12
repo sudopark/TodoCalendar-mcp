@@ -30,7 +30,9 @@ emulator 포트(기본 5001) + project-id 확인. 자세한 절차는 Functions 
 ```sh
 cp .env.integration.example .env.integration
 # OPENAPI_BASE_URL의 <project-id>를 Functions emulator project-id로 치환
-# OPENAPI_PAT_MCP / SIGNING_SECRET은 Functions repo의 functions/secrets/.env와 동일 값
+# OPENAPI_PAT_MCP / SIGNING_SECRET은 Functions repo의 functions/secrets/.env.test에서 가져옴
+#   (emulator는 prod secrets/.env가 아니라 .env.test의 dummy hex를 주입함)
+#   PAT는 .env.test의 OPENAPI_PAT_MCP 값 앞에 'mcp_' prefix를 붙여서 박는다.
 # CONFIRM_SECRET은 MCP 내부용 — 아무 random 문자열
 ```
 
