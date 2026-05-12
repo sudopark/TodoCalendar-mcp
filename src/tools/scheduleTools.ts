@@ -240,7 +240,7 @@ const replaceScheduleOccurrenceInput = z
 
 type ReplaceScheduleOccurrenceInput = z.infer<typeof replaceScheduleOccurrenceInput>
 
-const replaceScheduleOccurrenceOutput = z
+export const replaceScheduleOccurrenceOutput = z
   .object({
     updated_origin: scheduleSchema.describe(
       'The origin (repeating) schedule with the excluded occurrence added to `exclude_repeatings`.',
@@ -304,7 +304,7 @@ const branchScheduleRepeatingInput = z
 
 type BranchScheduleRepeatingInput = z.infer<typeof branchScheduleRepeatingInput>
 
-const branchScheduleRepeatingOutput = z
+export const branchScheduleRepeatingOutput = z
   .object({
     new: scheduleSchema.describe('The new schedule that takes over from the branch point.'),
     origin: scheduleSchema.describe(
