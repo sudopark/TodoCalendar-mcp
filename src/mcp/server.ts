@@ -10,7 +10,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import { ZodError } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { tools as defaultTools, type AnyToolDefinition } from '../tools/index.js'
-import { ToolError } from '../tools/shared/errors.js'
+import { ToolError, naturalizeToolMessage } from '../tools/shared/errors.js'
 import { AuthInvariantError } from './errors.js'
 import { buildCallToolResult, buildErrorResult } from './result.js'
 import { toMcpTool } from './toolSchema.js'
@@ -94,7 +94,11 @@ export const createMcpServer = (options: CreateMcpServerOptions = {}): Server =>
     } catch (e) {
       if (e instanceof ZodError) {
         return buildErrorResult(
-          new ToolError(400, 'InvalidParameter', formatZodError(e)),
+          new ToolError(
+            400,
+            'InvalidParameter',
+            naturalizeToolMessage('InvalidParameter', formatZodError(e)),
+          ),
         )
       }
       return buildErrorResult(e)
