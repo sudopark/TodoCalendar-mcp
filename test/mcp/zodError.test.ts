@@ -7,7 +7,7 @@ const collectError = (parse: () => unknown): z.ZodError => {
     parse()
   } catch (e) {
     if (e instanceof z.ZodError) return e
-    throw new Error('expected ZodError')
+    throw new Error('expected ZodError', { cause: e })
   }
   throw new Error('expected throw')
 }
