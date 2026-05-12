@@ -18,11 +18,16 @@ export class ToolError extends Error {
   }
 }
 
-const naturalize = (e: OpenApiError): string => {
-  const prefix = NATURAL[e.code]
-  if (prefix === undefined) return e.message
-  return e.message ? `${prefix} (${e.message})` : prefix
+// code → 자연어 prefix. detail이 있으면 `${prefix} (${detail})`, 없으면 prefix만.
+// dispatch가 직접 만드는 ToolError(zod 실패 등)와 wrapOpenApiError가 같은 helper를
+// 거쳐야 caller가 동일 code에 대해 일관된 메시지 형식을 받는다.
+export const naturalizeToolMessage = (code: string, detail: string): string => {
+  const prefix = NATURAL[code]
+  if (prefix === undefined) return detail
+  return detail ? `${prefix} (${detail})` : prefix
 }
+
+const naturalize = (e: OpenApiError): string => naturalizeToolMessage(e.code, e.message)
 
 export const wrapOpenApiError = (e: unknown): never => {
   if (e instanceof OpenApiError) {

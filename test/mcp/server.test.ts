@@ -232,6 +232,8 @@ describe('mcp server — tools/call', () => {
     const payload = JSON.parse(text)
     expect(payload.code).toBe('InvalidParameter')
     expect(payload.message).not.toMatch(/^\[/) // raw JSON 배열 시작 차단
+    // naturalize prefix — wrapOpenApiError와 동일 형식 일관성 (NATURAL map 경유)
+    expect(payload.message).toMatch(/^The request parameters are invalid\. \(/)
   })
 
   it('zod validation 실패 — 타입 오류 시 path + message 자연어 노출', async () => {
@@ -243,6 +245,7 @@ describe('mcp server — tools/call', () => {
     expect(result._meta).toEqual({ code: 'InvalidParameter', status: 400 })
     const text = (result.content as Array<{ text: string }>)[0]!.text
     const payload = JSON.parse(text)
+    expect(payload.message).toMatch(/^The request parameters are invalid\. \(/)
     expect(payload.message).toContain('name:')
     expect(payload.message.toLowerCase()).toContain('string')
     expect(openApiSpy.callCount).toBe(0)
@@ -260,6 +263,7 @@ describe('mcp server — tools/call', () => {
     expect(result._meta).toEqual({ code: 'InvalidParameter', status: 400 })
     const text = (result.content as Array<{ text: string }>)[0]!.text
     const payload = JSON.parse(text)
+    expect(payload.message).toMatch(/^The request parameters are invalid\. \(/)
     expect(payload.message).toContain('name:')
     expect(payload.message).toContain('color_hex:')
     expect(payload.message).toContain('; ')
