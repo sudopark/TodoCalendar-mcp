@@ -1,55 +1,113 @@
 # TodoCalendar-mcp
 
-MCP server + npm tool library for the TodoCalendar AI integration. 자세한 아키텍처·제약은 [`CLAUDE.md`](./CLAUDE.md)와 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1) 참고.
+AI agent가 TodoCalendar의 todo / schedule / tag 데이터를 다룰 수 있게 노출하는 MCP server + npm tool library.
 
-## Test
+두 진입점, 같은 tool layer:
 
-### Unit
+- **MCP server** (Streamable HTTP) — 외부 AI Agent용 (Claude Desktop 등)
+- **`@sudopark/todocalendar-tools`** — first-party AI 호스트가 직접 import해서 사용
 
-```sh
-npm test
+---
+
+## For external AI agents
+
+### Endpoint
+
+```
+https://mcp.todo-calendar.com/mcp
 ```
 
-`test/integration/**`은 제외됨.
+Streamable HTTP transport ([MCP spec 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18) 호환).
 
-### Integration (Functions emulator)
+### Auth
 
-실제 openAPI(Functions emulator)에 붙어 round-trip을 검증한다. emulator 미기동·env 누락 시 통합 테스트는 통째로 skip된다 — 실수로 실 서버를 때리지 않기 위함.
+OAuth 2.1 **Resource Server**. Authorization Server는 별 entity — TodoCalendar Functions가 호스팅. client는 그곳에서 token 발급 후:
 
-**1. Functions emulator 기동**
-
-```sh
-cd ../TodoCalendar-Functions
-firebase emulators:start
+```
+Authorization: Bearer <RS256 JWT>
 ```
 
-emulator 포트(기본 5001) + project-id 확인. 자세한 절차는 Functions 레포 README 참고.
+token에 필요한 scope이 박혀 있어야 함:
 
-**2. `.env.integration` 생성**
+- `read:calendar` — `get_*` tools
+- `write:calendar` — 생성·수정·삭제 tools
 
-```sh
-cp .env.integration.example .env.integration
-# OPENAPI_BASE_URL의 <project-id>를 Functions emulator project-id로 치환
-# OPENAPI_PAT_MCP / SIGNING_SECRET은 Functions repo의 functions/secrets/.env.test에서 가져옴
-#   (emulator는 prod secrets/.env가 아니라 .env.test의 dummy hex를 주입함)
-#   PAT는 .env.test의 OPENAPI_PAT_MCP 값 앞에 'mcp_' prefix를 붙여서 박는다.
-# CONFIRM_SECRET은 MCP 내부용 — 아무 random 문자열
+본 server는 `GET /.well-known/oauth-protected-resource` (RFC 9728)로 AS 위치·scope 목록 공개.
+
+### Tools
+
+24개. 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
+
+| 도메인           | tools                                                                                                                                                                     | CONFIRM           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| **todo**         | `get_todos` / `create_todo` / `update_todo` / `complete_todo` / `replace_todo` / `delete_todo`                                                                            | `delete_todo`     |
+| **schedule**     | `get_schedules` / `create_schedule` / `update_schedule` / `exclude_schedule_occurrence` / `replace_schedule_occurrence` / `branch_schedule_repeating` / `delete_schedule` | `delete_schedule` |
+| **tag**          | `get_tags` / `create_tag` / `update_tag` / `delete_tag`                                                                                                                   | —                 |
+| **done todo**    | `get_done_todos` / `update_done_todo` / `revert_done_todo` / `delete_done_todo`                                                                                           | —                 |
+| **event detail** | `get_event_details` / `set_event_detail` / `delete_event_detail`                                                                                                          | —                 |
+
+상세 입출력 스키마는 `tools/list` 응답 또는 각 tool의 `description` / `inputSchema` 참고.
+
+**CONFIRM 2단계** (`delete_todo` / `delete_schedule`): 첫 호출은 destructive 동작 없이 `confirmToken`만 반환, 두 번째 호출에 token echo로 실 삭제. token은 5분 TTL이고 user+tool+args에 바인딩 — 다른 사용자·다른 args에 재사용 불가.
+
+---
+
+## For library consumers
+
+`aiFrontAPI` 같은 first-party 서버사이드 AI 호스트는 MCP transport 우회하고 tool 함수를 직접 import.
+
+### Install
+
+GitHub Packages 인증 필요. 레포 root에 `.npmrc`:
+
+```
+@sudopark:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
-`.env.integration` 파일은 gitignore됨 — 실 secret이 커밋되지 않도록 주의.
-
-**3. 실행**
+`GITHUB_TOKEN`은 `read:packages` scope을 가진 personal access token.
 
 ```sh
-npm run test:integration
+npm install @sudopark/todocalendar-tools
 ```
 
-`.env.integration` 누락 또는 emulator 미기동 시 명확한 skip 사유가 출력된다.
+### Use
 
-#### 커버 범위
+```ts
+import { tools, type Auth } from '@sudopark/todocalendar-tools/tools'
 
-- **happy path** — 각 tool 1개 (24개)
-- **CONFIRM 2단계** — `delete_todo` / `delete_schedule` 토큰 발급 → 실 삭제 검증
-- **scope 가드** — `write:calendar` 누락 토큰으로 POST 호출 시 openAPI가 403 InsufficientScope를 반환하는지 1발 확인
+// auth context는 호출자가 만든다. 본 lib은 인증 검증 안 함.
+// Firebase Auth 등으로 token 검증 후 userId를 채워 넘김.
+const auth: Auth = {
+  userId: '<verified-user-id>',
+  scopes: ['read:calendar', 'write:calendar'],
+  // clientId?: OAuth client_id. dev/lib 경로는 보통 undefined.
+}
 
-에러 분기 폭주(`InvalidParameter` / `NotFound` 등) 회귀는 unit test가 mock으로 이미 가드 (`test/tools/**`).
+const result = await tools.get_todos.execute(auth, { mode: 'current' })
+```
+
+### 호출자 책임
+
+- **Auth context 검증**: `auth.userId`는 검증된 token `sub`에서만 추출. tool args 안에 userId 박아도 무시되도록 본 lib이 보장하지만, 호출자가 검증을 책임진다.
+- **Scope enforce는 transport 단에서만**: `auth.scopes`는 MCP server transport가 사용 — lib import 경로엔 enforce 효과 없음. openAPI 호출 시 항상 `read:calendar` + `write:calendar` 둘 다 박혀 나감. 호환을 위한 형식 필드.
+- **환경변수 4개 셋업** (lib 프로세스에 주입):
+  - `OPENAPI_BASE_URL` — openAPI base URL
+  - `OPENAPI_PAT_MCP` — 서비스 인증 PAT (`mcp_<secret>` 형식)
+  - `SIGNING_SECRET` — `x-open-user-token` HS256 서명 키 (openAPI와 공유)
+  - `CONFIRM_SECRET` — confirm token HMAC 키
+
+### 응답 / 에러 면
+
+- **Raw passthrough**: 응답 페이로드는 openAPI 그대로. `outputSchema`는 LLM 설명 채널 — runtime parse 안 함. 추가 필드도 보존.
+- **에러**: `ToolError` 형태 — `{ status, code, message }`. `code` 카탈로그: `InvalidParameter`(400) / `NotFound`(404) / `InsufficientScope`(403) / `Timeout`(0) 등. `message`는 자연어 보강, `code`·`status`는 항상 원본.
+
+### Export 면
+
+`@sudopark/todocalendar-tools/tools`만 공개. 시그니처·타입 변경은 semver major.
+
+---
+
+## License
+
+MIT.
