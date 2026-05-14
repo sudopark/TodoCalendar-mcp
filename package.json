@@ -1,6 +1,6 @@
 {
   "name": "@sudopark/todocalendar-tools",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "TodoCalendar MCP server + tool library for AI agents",
   "type": "module",
   "engines": {
