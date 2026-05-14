@@ -22,3 +22,4 @@ coverage/
 .vscode/
 *.swp
 .DS_Store
+.npmrc
