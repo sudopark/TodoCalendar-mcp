@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-현재 저장소는 greenfield — 코드는 아직 없고 설계만 확정돼 있다. 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
+24개 tool 구현 + unit/integration 테스트 + OAuth Resource Server까지 도달. 첫 외부 publish/배포 전. 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
 
 ## What this is
 
@@ -12,7 +12,7 @@ AI Agent가 TodoCalendar의 todo / schedule / tag 데이터를 다룰 수 있도
 
 두 종류의 호출자:
 
-- **외부 AI Agent** (Claude Desktop 등): MCP server를 Streamable HTTP로 호출. **auth는 미구현 상태로 첫 배포** — 향후 OAuth 추가.
+- **외부 AI Agent** (Claude Desktop 등): MCP server를 Streamable HTTP로 호출. OAuth 2.1 Resource Server (`AUTH_MODE=oauth`) — Bearer RS256 JWT 검증. 로컬 dev는 `AUTH_MODE=dev` + `X-Dev-User-Id` 헤더 stub.
 - **first-party** (`aiFrontAPI` 서버사이드 AI 호스트): tool 함수를 npm 라이브러리로 직접 import — MCP transport 우회.
 
 ## Architecture
@@ -31,7 +31,7 @@ flowchart TB
     AiFront <-->|tool_use 루프| Anthropic
     AiFront -->|"npm install + import 'tools'"| Lib
 
-    ExtAgent -->|"Streamable HTTP (auth 미구현)"| MCPServer
+    ExtAgent -->|"Streamable HTTP + Bearer (OAuth RS)"| MCPServer
     MCPServer -.->|local source 동일 코드| Lib
 
     Lib -->|"HTTP — PAT + 자체 서명 HS256 JWT"| OpenAPI
@@ -41,20 +41,21 @@ flowchart TB
 
 ## Stack
 
-- Node.js 22+, TypeScript
+- Node.js 24+, TypeScript
 - MCP SDK: `@modelcontextprotocol/sdk`
 - Transport: Streamable HTTP
-- 호스팅: **Cloud Run**
+- 호스팅: **Cloud Run** (수동 배포 — CI/CD 자동화 없음, [#12](https://github.com/sudopark/TodoCalendar-mcp/issues/12) deprecated)
 - JWT: `jsonwebtoken` (**Firebase Admin SDK 의존 금지** — 아래 §2)
+- Test: vitest (unit + integration. integration은 Functions emulator 전제)
 
 ## Two artifacts in this repo
 
-| 산출물 | 배포처 | 소비자 |
-|---|---|---|
-| **MCP server** | Cloud Run | 외부 AI Agent (auth 추가 후) |
+| 산출물                                 | 배포처          | 소비자                              |
+| -------------------------------------- | --------------- | ----------------------------------- |
+| **MCP server**                         | Cloud Run       | 외부 AI Agent (OAuth RS)            |
 | **npm library** (`todocalendar-tools`) | GitHub Packages | `TodoCalendar-Functions/aiFrontAPI` |
 
-운영: 단일 버전, 단일 릴리스. `git tag vX.Y.Z` → CI 두 잡 병렬 (`npm publish` + `gcloud run deploy`).
+운영: 단일 버전, 단일 릴리스. **CI/CD 자동화 없음 — `npm publish` + `gcloud run deploy` 둘 다 작업자가 수동.** integration test도 CI에 안 붙임 — PR 머지 전 작업자가 로컬 emulator 위에서 직접 `npm run test:integration` 실행. 자세한 명령은 [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 `package.json` `exports`가 외부 공개 면 — **`tools/`만** 노출. `server.ts`, `openapi/`, `confirm/`, `auth/`, `middleware/` 등 나머지는 전부 비공개. openapi 클라이언트나 confirm 토큰 모듈은 tool 안에서만 쓰이고, 직접 노출하면 다운스트림이 tool 레이어를 우회할 위험.
 
@@ -62,15 +63,15 @@ flowchart TB
 
 ## Commands
 
-`package.json`은 아직 없음. 스캐폴드 후 일반적으로 `npm install` / `npm run build` (tsc) / `npm test` / `npm run lint`. 배포는 CI가 git tag로 트리거.
+`npm run dev` / `build` / `start` / `test` / `test:integration` / `typecheck` / `lint` / `format:check`. 자동수정(`prettier --write` / `eslint --fix`)은 사용자 명시 승인 후에만 — silent format 금지. 전체 표는 [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## Architectural constraints (non-obvious — 반드시 준수)
 
 이 결정들은 보안·레포 분리·다운스트림 호환과 직결되므로 임의로 바꾸지 말 것. 변경이 필요하면 issue에서 먼저 합의.
 
-### 1. JWT 검증 시 algorithm·issuer 화이트리스트 명시
+### 1. JWT 검증 시 algorithm·issuer·audience 화이트리스트 명시
 
-`algorithms: ['RS256']` + `issuer: 'mcp-oauth'`. 알고리즘 confusion attack 차단. 단일값이지만 명시 의무.
+`algorithms: ['RS256']` + `issuer: env MCP_OAUTH_ISSUER` + `audience: env MCP_CANONICAL_URI`. 알고리즘 confusion attack 차단. issuer/audience는 env에서 단일값 화이트리스트로 주입 — Functions repo AS issuer / 본 server canonical URI와 정확히 일치해야 검증 통과. 본 server는 키쌍을 직접 보유하지 않음 — `<issuer>/.well-known/jwks.json`에서 public key를 fetch.
 
 ### 2. Firebase Admin SDK 도입 금지
 
@@ -113,15 +114,15 @@ LLM이 raw를 해석하도록 돕는 채널은 **MCP가 LLM에 보내는 schema 
 ```
 [외부 AI Agent — MCP transport]
   → MCP server: Streamable HTTP 수신
-  → (auth middleware는 추후 OAuth 추가 시) → { userId } 반환
+  → AUTH_MODE 분기: oauth(Bearer RS256 검증) / dev(X-Dev-User-Id stub) → { userId, scopes } 반환
   → tools[name].execute(auth, args)        // userId는 auth에서만, args 무시
   → openapi/client.callOpenApi(auth, ...)  // PAT + 자체 서명 HS256 JWT 주입
 
 [first-party — npm library import, MCP 우회]
   aiFrontAPI 안에서:
   → Firebase Auth 검증 → userId 획득
-  → import { ... } from 'todocalendar-tools/tools'
-  → 같은 tools[name].execute({ userId }, args) 직접 호출
+  → import { tools, type Auth } from '@sudopark/todocalendar-tools/tools'
+  → 같은 tools[name].execute(auth, args) 직접 호출  // auth = { userId, scopes }
   → openapi/client.callOpenApi(...)
 ```
 
@@ -129,17 +130,36 @@ LLM이 raw를 해석하도록 돕는 채널은 **MCP가 LLM에 보내는 schema 
 
 ## Environment variables
 
+필수:
+
 - `OPENAPI_BASE_URL` — openAPI 호출 base
-- `OPENAPI_PAT_MCP` — openAPI 서비스 인증 PAT
-- `SIGNING_SECRET` — openAPI client가 user JWT 서명에 사용 (HS256, aiFrontAPI / openAPI와 공유)
-- `MCP_OAUTH_PRIVATE_KEY` / `MCP_OAUTH_PUBLIC_KEY` — OAuth 추가 시 RS256 발급·JWKS 노출용
+- `OPENAPI_PAT_MCP` — openAPI 서비스 인증 PAT (`mcp_<secret>` 형식)
+- `SIGNING_SECRET` — `x-open-user-token` HS256 서명 키 (aiFrontAPI / openAPI와 공유)
+- `CONFIRM_SECRET` — confirm token HMAC 키 (본 레포 내부)
+
+OAuth 모드 (`AUTH_MODE=oauth`):
+
+- `MCP_OAUTH_ISSUER` — AS root URL (token iss 화이트리스트 + JWKS base)
+- `MCP_CANONICAL_URI` — 본 server canonical URI (token aud 검증 + RFC 9728 resource). Functions 측과 동일 값. 운영: `https://mcp.todo-calendar.com/mcp`
+
+옵션:
+
+- `AUTH_MODE` — `oauth` (기본) / `dev`
+- `OPENAPI_TIMEOUT_MS` / `OPENAPI_RETRY_COUNT` — client retry tuning
+- `ALLOWED_HOSTS` — DNS rebinding 방어, Cloud Run 호스트명 콤마 구분. 운영 권장
+- `PORT` — HTTP listen 포트, 기본 3000
+
+전체 설명·로컬 dev 절차는 `.env.example` + [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## Cross-repo dependencies
 
 이 레포 단독으로는 동작 불가 — integration은 Functions 레포 emulator 위에서.
 
+- `sudopark/TodoCalendar-Functions#151` — AI 기능 전체 설계 (parent)
 - `sudopark/TodoCalendar-Functions#152` — openAPI MVP (호출 대상)
-- `sudopark/TodoCalendar-Functions#D` — aiFrontAPI (서버사이드 AI 호스트, `todocalendar-tools` lib 소비자)
-- `sudopark/TodoCalendar-Functions#151` — AI 기능 전체 설계 (parent issue)
+- `sudopark/TodoCalendar-Functions#189` — OAuth Authorization Server (token iss, 본 server가 검증)
+- `sudopark/TodoCalendar-Functions#178` — `branch_schedule_repeating` 500 (fix 전엔 `it.skip`)
+- `sudopark/TodoCalendar-Functions#191` — `revertDoneTodoV2` 응답 `todo.name` 누락 (fix 후 회귀 가드 복원 예정)
+- `sudopark/TodoCalendar-Functions` `aiFrontAPI` — lib 소비자
 
-openAPI 스펙 source of truth: `TodoCalendar-Functions/functions/swagger/swagger.yaml` (`/v2/open/*` 경로 + components.schemas 모델 + 에러 모델 `{status, code, message}`. 코드 카탈로그: `InvalidParameter`(400) / `NotFound`(404) / `InsufficientScope`(403))
+openAPI 스펙 source of truth: `TodoCalendar-Functions/functions/swagger/swagger.yaml` (`/v2/open/*` 경로 + components.schemas 모델 + 에러 모델 `{status, code, message}`. 코드 카탈로그: `InvalidParameter`(400) / `NotFound`(404) / `InsufficientScope`(403) / `Timeout`(0, 본 레포 client retry 도입 시 추가))
