@@ -1,5 +1,4 @@
 import http, { type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http'
-import 'dotenv/config'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { OAuthTokenError } from './auth/oauthVerify.js'

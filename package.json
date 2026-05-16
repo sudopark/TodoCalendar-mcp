@@ -1,6 +1,6 @@
 {
   "name": "@sudopark/todocalendar-tools",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TodoCalendar MCP server + tool library for AI agents",
   "type": "module",
   "engines": {
@@ -18,7 +18,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file=.env.emulator src/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",

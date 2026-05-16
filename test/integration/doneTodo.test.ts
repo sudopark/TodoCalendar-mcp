@@ -56,9 +56,6 @@ describe.skipIf(!readiness.ready)('integration: done-todo happy path', () => {
   })
 
   it('revert_done_todo — done을 active todo로 복귀 (auth user 면 round-trip)', async () => {
-    // NOTE: Functions emulator의 revertDoneTodoV2가 응답 todo.name을 누락하고 있음
-    // (swagger상 Todo.name은 required). 회귀 가드는 userId round-trip으로 대체 —
-    // auth 컨텍스트가 todo에 박혀 제대로 돌아오는지 검증. upstream fix 후 name 검증 복원.
     const auth = makeIntegrationAuth()
     const done = await seedDoneTodo(auth, 'to-revert')
 

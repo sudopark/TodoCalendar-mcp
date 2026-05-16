@@ -27,7 +27,10 @@ describe('toMcpTool', () => {
     })
   })
 
-  it('discriminatedUnion input — top-level oneOf을 type:object로 감싸 MCP 호환', () => {
+  it('discriminatedUnion input — root union(oneOf/anyOf/allOf)이면 throw', () => {
+    // Anthropic API는 tools[*].input_schema의 root에 oneOf/allOf/anyOf 불허.
+    // MCP는 type:object만 강제하므로 wrap만 해서 통과시키면 다운스트림 LLM API에서 400.
+    // ListTools forward되는 모든 turn에서 깨지므로 dev 시점에 즉시 throw로 가드.
     const def = stub({
       inputSchema: z.discriminatedUnion('mode', [
         z.object({ mode: z.literal('current') }),
@@ -35,9 +38,21 @@ describe('toMcpTool', () => {
       ]),
     }) as AnyToolDefinition
 
-    const tool = toMcpTool(def)
-    expect(tool.inputSchema.type).toBe('object')
-    expect(tool.inputSchema['oneOf']).toBeDefined()
+    expect(() => toMcpTool(def)).toThrowError(/root.*(oneOf|anyOf|allOf)/i)
+  })
+
+  it('union output — root anyOf이면 throw', () => {
+    // outputSchema가 root anyOf이면 toMcpOutputSchema의 type 가드에 걸려 silently
+    // undefined 반환 → 클라이언트로 outputSchema 미송신 → LLM이 응답 모양 hint 못 받음.
+    // 같은 root-union 회귀를 input/output 양쪽에서 동일 신호로 잡는다.
+    const def = stub({
+      outputSchema: z.union([
+        z.object({ kind: z.literal('a'), aValue: z.string() }),
+        z.object({ kind: z.literal('b'), bValue: z.number() }),
+      ]),
+    }) as AnyToolDefinition
+
+    expect(() => toMcpTool(def)).toThrowError(/root.*(oneOf|anyOf|allOf)/i)
   })
 
   it('object output — outputSchema 노출, additionalProperties 완화 (raw passthrough)', () => {
@@ -84,24 +99,13 @@ describe('toMcpTool', () => {
     expect(itemSchema?.['additionalProperties']).toEqual({})
   })
 
-  it('unevaluatedProperties:false도 완화 (intersection·allOf 합성 시 emit)', () => {
-    // 인공 케이스: zod의 intersection / allOf 등에서 emit될 수 있는 패턴 직접 시뮬레이션.
-    // toJSONSchema로는 잘 안 나오지만 미래 합성 케이스 회귀 잡기 위한 가드.
-    // (z.toJSONSchema가 unevaluatedProperties를 직접 emit하는 단일 케이스가 zod v4에선 드물어
-    //  여기선 relaxAdditional의 동작을 직접 검증하는 unit test 성격으로 추가)
+  it('intersection output — root allOf이면 throw', () => {
+    // z.intersection은 zod v4에서 root allOf을 emit. 동일 root-union 가드에 걸려야.
     const def = stub({
-      outputSchema: z.intersection(
-        z.object({ a: z.string() }),
-        z.object({ b: z.number() }),
-      ),
+      outputSchema: z.intersection(z.object({ a: z.string() }), z.object({ b: z.number() })),
     }) as AnyToolDefinition
 
-    const tool = toMcpTool(def)
-    if (tool.outputSchema === undefined) return // intersection이 type:object 아니면 미노출 — OK
-    // additionalProperties든 unevaluatedProperties든 false인 키가 잔존하면 안 됨
-    const json = JSON.stringify(tool.outputSchema)
-    expect(json.includes('"additionalProperties":false')).toBe(false)
-    expect(json.includes('"unevaluatedProperties":false')).toBe(false)
+    expect(() => toMcpTool(def)).toThrowError(/root.*(oneOf|anyOf|allOf)/i)
   })
 
   it('name·description 그대로 노출', () => {
