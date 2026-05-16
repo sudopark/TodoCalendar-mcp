@@ -28,16 +28,30 @@ const relaxAdditional = (json: unknown): unknown => {
   return out
 }
 
+const ROOT_UNION_KEYS = ['oneOf', 'anyOf', 'allOf'] as const
+
+// Anthropic API: tools[*].input_schema root에 oneOf/allOf/anyOf 불허 — ListTools forward
+// 되는 모든 turn에서 400으로 세션 전체 먹통. MCP outputSchema도 root union이면 type 가드에
+// 걸려 silently drop되어 LLM hint 손실. 두 회귀를 dev 시점에 동일 신호로 throw.
+const assertNoRootUnion = (json: Record<string, unknown>, role: 'input' | 'output'): void => {
+  const present = ROOT_UNION_KEYS.filter((k) => k in json)
+  if (present.length === 0) return
+  throw new Error(
+    `tool ${role}Schema must not have root ${present.join('/')} — Anthropic API rejects ` +
+      `tools[*].input_schema with top-level oneOf/anyOf/allOf, and MCP silently drops ` +
+      `root-union outputSchema. Flatten to a single object schema.`,
+  )
+}
+
 const toMcpInputSchema = (zod: z.ZodType): InputSchema => {
   const json = stripMeta(z.toJSONSchema(zod) as Record<string, unknown>)
-  // discriminatedUnion → top-level `oneOf` without `type`. MCP requires `type: 'object'`.
-  // The branches are themselves objects, so combining is semantically equivalent.
-  if (json.type !== 'object') return { type: 'object', ...json } as InputSchema
+  assertNoRootUnion(json, 'input')
   return json as InputSchema
 }
 
 const toMcpOutputSchema = (zod: z.ZodType): OutputSchema | undefined => {
   const json = stripMeta(z.toJSONSchema(zod) as Record<string, unknown>)
+  assertNoRootUnion(json, 'output')
   // MCP spec: outputSchema root MUST be `type: 'object'`. Array-returning tools
   // (get_todos / get_schedules / get_tags) skip outputSchema — text payload still
   // carries the raw JSON, and tool description documents the shape.
