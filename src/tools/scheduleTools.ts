@@ -2,16 +2,12 @@ import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
 import { wrapOpenApiError } from './shared/errors.js'
+import { buildConfirmRequired, ensureConfirmToken } from './shared/confirm.js'
 import {
-  buildConfirmRequired,
-  confirmRequiredSchema,
-  ensureConfirmToken,
-} from './shared/confirm.js'
-import {
+  confirmableStatusSchema,
   eventTimeSchema,
   repeatingSchema,
   scheduleSchema,
-  statusOkSchema,
 } from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
@@ -367,11 +363,9 @@ const deleteScheduleInput = z
 
 type DeleteScheduleInput = z.infer<typeof deleteScheduleInput>
 
-const deleteScheduleOutput = z
-  .union([confirmRequiredSchema, statusOkSchema])
-  .describe(
-    "Either the confirm_required envelope (first call) or {status:'ok'} after the actual deletion. Note: the openAPI returns HTTP 201 (not 200) for schedule delete — the payload shape is still {status:'ok'}. Any additional fields the openAPI returns are preserved verbatim (raw passthrough).",
-  )
+const deleteScheduleOutput = confirmableStatusSchema.describe(
+  'CONFIRM-gated tool result. First call: { status:"confirm_required", message, confirmToken, action, target } — no backend mutation. Second call (with confirmToken): { status:"ok" } after actual deletion. Note: the openAPI returns HTTP 201 (not 200) for schedule delete — the payload shape is still {status:"ok"}. Any additional fields the openAPI returns are preserved verbatim (raw passthrough).',
+)
 
 type DeleteScheduleOutput = z.infer<typeof deleteScheduleOutput>
 
