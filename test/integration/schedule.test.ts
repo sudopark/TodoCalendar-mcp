@@ -110,12 +110,7 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     expect(result.new_schedule.name).toBe('one-off-replacement')
   })
 
-  // [리뷰 #33 권장 trade-off] it.skip 유지 — happy path 의도(spec)를 코드에 남긴다는 게
-  // 가치 큼. reality 가드(`expect(...).rejects.toMatchObject({status:500})`)로 가는
-  // 대안도 있으나, 머지 시점에 happy path 자체를 검증 못 하면 fix 후 별도 PR로 갈아끼우는
-  // 비용이 같음. it.skip은 enable 시점에 단순히 `.skip` 제거만 하면 그대로 동작 가능.
-  // Functions#178 머지 후 it.skip 제거 + happy path 검증 enable.
-  it.skip('branch_schedule_repeating — Functions#178 머지 후 enable', async () => {
+  it('branch_schedule_repeating — daily 룰을 NEXT_OCCURRENCE에서 끊고 새 schedule 분기', async () => {
     const auth = makeIntegrationAuth()
     const origin = (await createSchedule.execute(auth, {
       name: 'origin-daily',
