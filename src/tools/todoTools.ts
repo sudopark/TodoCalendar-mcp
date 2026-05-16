@@ -1,44 +1,45 @@
 import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
-import { wrapOpenApiError } from './shared/errors.js'
+import { naturalizeToolMessage, ToolError, wrapOpenApiError } from './shared/errors.js'
+import { buildConfirmRequired, ensureConfirmToken } from './shared/confirm.js'
 import {
-  buildConfirmRequired,
-  confirmRequiredSchema,
-  ensureConfirmToken,
-} from './shared/confirm.js'
-import {
+  confirmableStatusSchema,
   doneTodoSchema,
   eventDetailSchema,
   eventTimeSchema,
   repeatingSchema,
-  statusOkSchema,
   todoSchema,
 } from './shared/schemas.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const TS_SEC = 'Unix epoch seconds (UTC).'
 
-const getTodosInput = z.discriminatedUnion('mode', [
-  z
-    .object({ mode: z.literal('current') })
-    .describe('Returns "current" todos that are not bound to a specific time.'),
-  z
-    .object({
-      mode: z.literal('range'),
-      lower: z.number().describe(`Range start (inclusive). ${TS_SEC}`),
-      upper: z.number().describe(`Range end (inclusive). ${TS_SEC}`),
-    })
-    .describe('Returns todos whose event_time falls within [lower, upper].'),
-  z
-    .object({
-      mode: z.literal('uncompleted'),
-      refTime: z
-        .number()
-        .describe(`Reference moment to compute "still uncompleted" against. ${TS_SEC}`),
-    })
-    .describe('Returns todos that remain uncompleted as of refTime.'),
-])
+// 평탄화된 단일 object — discriminatedUnion은 root oneOf을 만들어 Anthropic API
+// (tools[*].input_schema)에서 400. 분기별 필수 필드 검증은 dispatchPath에서 mode로 분기해 ToolError.
+const getTodosInput = z
+  .object({
+    mode: z
+      .enum(['current', 'range', 'uncompleted'])
+      .describe(
+        'Selection mode. "current": non-time-bound todos (no other field required). "range": todos within [lower, upper] (both lower & upper required). "uncompleted": todos still uncompleted as of refTime (refTime required).',
+      ),
+    lower: z
+      .number()
+      .optional()
+      .describe(`Required when mode="range". Range start (inclusive). ${TS_SEC}`),
+    upper: z
+      .number()
+      .optional()
+      .describe(`Required when mode="range". Range end (inclusive). ${TS_SEC}`),
+    refTime: z
+      .number()
+      .optional()
+      .describe(
+        `Required when mode="uncompleted". Reference moment to compute "still uncompleted" against. ${TS_SEC}`,
+      ),
+  })
+  .describe('Pick a mode then provide the fields it requires (see field descriptions).')
 
 type GetTodosInput = z.infer<typeof getTodosInput>
 
@@ -48,11 +49,17 @@ const getTodosOutput = z
 
 type GetTodosOutput = z.infer<typeof getTodosOutput>
 
+const missingFieldError = (detail: string): ToolError =>
+  new ToolError(400, 'InvalidParameter', naturalizeToolMessage('InvalidParameter', detail))
+
 const dispatchPath = (input: GetTodosInput): string => {
   switch (input.mode) {
     case 'current':
       return '/v2/open/todos/'
     case 'range': {
+      if (input.lower === undefined || input.upper === undefined) {
+        throw missingFieldError('mode="range" requires both `lower` and `upper`')
+      }
       const qs = new URLSearchParams({
         lower: String(input.lower),
         upper: String(input.upper),
@@ -60,6 +67,9 @@ const dispatchPath = (input: GetTodosInput): string => {
       return `/v2/open/todos/?${qs.toString()}`
     }
     case 'uncompleted': {
+      if (input.refTime === undefined) {
+        throw missingFieldError('mode="uncompleted" requires `refTime`')
+      }
       const qs = new URLSearchParams({ refTime: String(input.refTime) })
       return `/v2/open/todos/uncompleted?${qs.toString()}`
     }
@@ -331,11 +341,7 @@ const deleteTodoInput = z
 
 type DeleteTodoInput = z.infer<typeof deleteTodoInput>
 
-const deleteTodoOutput = z
-  .union([confirmRequiredSchema, statusOkSchema])
-  .describe(
-    "Either the confirm_required envelope (first call, no destructive effect) or {status:'ok'} after the actual deletion.",
-  )
+const deleteTodoOutput = confirmableStatusSchema
 
 type DeleteTodoOutput = z.infer<typeof deleteTodoOutput>
 

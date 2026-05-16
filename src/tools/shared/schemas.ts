@@ -146,3 +146,43 @@ export const statusOkSchema = z
   .describe(
     'Generic success envelope returned by mutation endpoints that do not echo the entity. Any additional fields the openAPI returns are preserved verbatim (raw passthrough).',
   )
+
+// CONFIRM 게이트 tool의 outputSchema. 두 분기(first call의 confirm_required envelope /
+// second call의 status:"ok")를 단일 object로 평탄화. root anyOf을 만들면 Anthropic API
+// (input_schema) 거부 + MCP outputSchema silent drop 양쪽 깨짐(#41). runtime parse 안 함(§6)
+// 이라 모양은 LLM hint 전용 — status가 discriminator, 분기별 필드는 모두 optional.
+export const confirmableStatusSchema = z
+  .object({
+    status: z
+      .enum(['confirm_required', 'ok'])
+      .describe(
+        'Discriminator. "confirm_required" = first call (no destructive effect — message/confirmToken/action/target are populated). "ok" = second call after actual execution.',
+      ),
+    message: z
+      .string()
+      .optional()
+      .describe(
+        'Populated when status="confirm_required". Human-readable confirmation prompt to surface to the end user before re-calling.',
+      ),
+    confirmToken: z
+      .string()
+      .optional()
+      .describe(
+        'Populated when status="confirm_required". Opaque token to echo back on the next call to actually execute. Expires in 5 minutes. Verification is stateless — re-usable until expiry against the SAME args under the SAME user; re-issue a fresh token if intent changes.',
+      ),
+    action: z
+      .string()
+      .optional()
+      .describe(
+        'Populated when status="confirm_required". The tool name this token is scoped to.',
+      ),
+    target: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(
+        'Populated when status="confirm_required". The arguments this token is bound to. On re-call, pass the SAME arguments that appear under `target` (alongside `confirmToken`) — do NOT mutate `target` itself.',
+      ),
+  })
+  .describe(
+    'CONFIRM-gated tool result. First call: { status:"confirm_required", message, confirmToken, action, target } — no backend mutation. Second call (with confirmToken): { status:"ok" } after actual execution. Any additional fields the openAPI returns on the second call are preserved verbatim (raw passthrough).',
+  )
