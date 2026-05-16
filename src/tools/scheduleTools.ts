@@ -295,7 +295,7 @@ const branchScheduleRepeatingInput = z
     end_time: z
       .number()
       .describe(
-        `Timestamp (${TS_SEC}) at which the origin's recurrence ends and the new schedule takes over. Boundary inclusivity is not yet locked — see TodoCalendar-Functions #178.`,
+        `Timestamp (${TS_SEC}) at which the origin's recurrence ends and the new schedule takes over.`,
       ),
   })
   .describe(
@@ -330,7 +330,7 @@ Decision guide for the agent:
   - To replace only one occurrence while keeping the recurrence, use replace_schedule_occurrence.
   - To skip one occurrence with no replacement, use exclude_schedule_occurrence.
 
-Upstream caveat (TodoCalendar-Functions #178): the openAPI implementation currently returns 500 — expect a 500-class ToolError until that fix ships. The tool wiring matches the spec, so call it normally when the use-case fits; do not avoid the tool, the error will be the upstream service, not the call. All timestamps are Unix epoch seconds (UTC).`,
+All timestamps are Unix epoch seconds (UTC).`,
   inputSchema: branchScheduleRepeatingInput,
   outputSchema: branchScheduleRepeatingOutput,
   execute: async (

@@ -158,8 +158,6 @@ OAuth 모드 (`AUTH_MODE=oauth`):
 - `sudopark/TodoCalendar-Functions#151` — AI 기능 전체 설계 (parent)
 - `sudopark/TodoCalendar-Functions#152` — openAPI MVP (호출 대상)
 - `sudopark/TodoCalendar-Functions#189` — OAuth Authorization Server (token iss, 본 server가 검증)
-- `sudopark/TodoCalendar-Functions#178` — `branch_schedule_repeating` 500 (fix 전엔 `it.skip`)
-- `sudopark/TodoCalendar-Functions#191` — `revertDoneTodoV2` 응답 `todo.name` 누락 (fix 후 회귀 가드 복원 예정)
 - `sudopark/TodoCalendar-Functions` `aiFrontAPI` — lib 소비자
 
 openAPI 스펙 source of truth: `TodoCalendar-Functions/functions/swagger/swagger.yaml` (`/v2/open/*` 경로 + components.schemas 모델 + 에러 모델 `{status, code, message}`. 코드 카탈로그: `InvalidParameter`(400) / `NotFound`(404) / `InsufficientScope`(403) / `Timeout`(0, 본 레포 client retry 도입 시 추가))

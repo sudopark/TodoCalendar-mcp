@@ -226,8 +226,4 @@ describe('branch_schedule_repeating — metadata', () => {
     expect(branchScheduleRepeating.inputSchema).toBeDefined()
     expect(branchScheduleRepeating.outputSchema).toBeDefined()
   })
-
-  it('description은 Functions #178 알려진 이슈(현재 500)를 안내', () => {
-    expect(branchScheduleRepeating.description).toMatch(/#178|known issue|currently returns 500/i)
-  })
 })
