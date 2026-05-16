@@ -6,11 +6,9 @@ dist/
 build/
 *.tsbuildinfo
 
-# Environment files — NEVER commit real values
+# Environment files — NEVER commit. 운영 secret은 GCP Secret Manager로 주입.
 .env
 .env.*
-!.env.example
-!.env.*.example
 
 # Test / coverage
 coverage/

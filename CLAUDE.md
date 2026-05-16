@@ -55,7 +55,7 @@ flowchart TB
 | **MCP server**                         | Cloud Run       | 외부 AI Agent (OAuth RS)            |
 | **npm library** (`todocalendar-tools`) | GitHub Packages | `TodoCalendar-Functions/aiFrontAPI` |
 
-운영: 단일 버전, 단일 릴리스. **CI/CD 자동화 없음 — `npm publish` + `gcloud run deploy` 둘 다 작업자가 수동.** integration test도 CI에 안 붙임 — PR 머지 전 작업자가 로컬 emulator 위에서 직접 `npm run test:integration` 실행. 자세한 명령은 [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+운영: 단일 버전, 단일 릴리스. **CI/CD 자동화 없음 — `npm publish` + `gcloud run deploy` 둘 다 작업자가 수동.** integration test도 CI에 안 붙임 — PR 머지 전 작업자가 로컬 emulator 위에서 직접 `npm run test:integration` 실행.
 
 `package.json` `exports`가 외부 공개 면 — **`tools/`만** 노출. `server.ts`, `openapi/`, `confirm/`, `auth/`, `middleware/` 등 나머지는 전부 비공개. openapi 클라이언트나 confirm 토큰 모듈은 tool 안에서만 쓰이고, 직접 노출하면 다운스트림이 tool 레이어를 우회할 위험.
 
@@ -63,7 +63,9 @@ flowchart TB
 
 ## Commands
 
-`npm run dev` / `build` / `start` / `test` / `test:integration` / `typecheck` / `lint` / `format:check`. 자동수정(`prettier --write` / `eslint --fix`)은 사용자 명시 승인 후에만 — silent format 금지. 전체 표는 [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+`npm run dev` / `build` / `start` / `test` / `test:integration` / `typecheck` / `lint` / `format:check`. 자동수정(`prettier --write` / `eslint --fix`)은 사용자 명시 승인 후에만 — silent format 금지.
+
+`npm run dev`는 `tsx watch --env-file=.env.emulator src/server.ts` — 로컬 Functions emulator 연동용 더미값 (gitignored). 운영(Cloud Run)은 GCP Secret Manager + `--set-env-vars`/`--set-secrets`로 직접 주입.
 
 ## Architectural constraints (non-obvious — 반드시 준수)
 
@@ -149,7 +151,7 @@ OAuth 모드 (`AUTH_MODE=oauth`):
 - `ALLOWED_HOSTS` — DNS rebinding 방어, Cloud Run 호스트명 콤마 구분. 운영 권장
 - `PORT` — HTTP listen 포트, 기본 3000
 
-전체 설명·로컬 dev 절차는 `.env.example` + [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+로컬 dev는 `.env.emulator` (gitignored) — Functions의 `functions/secrets/.env.test`와 정렬. `npm run dev`가 `tsx --env-file=.env.emulator`로 명시 로드.
 
 ## Cross-repo dependencies
 
