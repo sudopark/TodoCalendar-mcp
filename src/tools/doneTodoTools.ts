@@ -48,7 +48,7 @@ export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput>
   name: 'get_done_todos',
   scopes: ['read:calendar'],
   description: `\
-Fetch completed (done) todos for the authenticated user, ordered by completion time (newest first), paginated by cursor.
+List / fetch / show / get completed (done / finished / closed / past) todos for the authenticated user — history of what's been checked off, ordered by completion time (newest first), paginated by cursor.
 
 Response is an array of done todos. For pagination, pass the last item's 'done_at' as 'cursor' on the next call (cursor is excluded — items strictly older than cursor are returned). When the returned array length is less than 'size', there are no more pages. All timestamps in the response are Unix epoch seconds (UTC).`,
   inputSchema: getDoneTodosInput,

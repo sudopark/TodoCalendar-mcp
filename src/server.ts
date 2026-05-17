@@ -10,6 +10,7 @@ import {
 } from './middleware/auth.js'
 import { createMcpServer } from './mcp/server.js'
 import { tools } from './tools/index.js'
+import { FAVICON_PNG_BYTES } from './assets/favicon.js'
 
 type AuthedRequest = IncomingMessage & { auth?: AuthInfo }
 
@@ -32,6 +33,13 @@ const writeJson = (res: ServerResponse, status: number, body: unknown): void => 
   res.statusCode = status
   res.setHeader('content-type', 'application/json')
   res.end(JSON.stringify(body))
+}
+
+const writeFavicon = (res: ServerResponse): void => {
+  res.statusCode = 200
+  res.setHeader('content-type', 'image/png')
+  res.setHeader('cache-control', 'public, max-age=86400')
+  res.end(FAVICON_PNG_BYTES)
 }
 
 const writeMethodNotAllowed = (res: ServerResponse, allow: string): void => {
@@ -307,6 +315,13 @@ export const createHttpServer = (options: HttpServerOptions = {}): HttpServer =>
       writeJson(res, 200, { status: 'ok' })
       return
     }
+    if (
+      req.method === 'GET' &&
+      (pathname === '/favicon.ico' || pathname === '/favicon.png')
+    ) {
+      writeFavicon(res)
+      return
+    }
     if (req.method === 'GET' && pathname === PROTECTED_RESOURCE_METADATA_PATH) {
       writeProtectedResourceMetadata(res, options)
       return
@@ -361,7 +376,7 @@ const start = async (): Promise<void> => {
   const httpServer = createHttpServer({ allowedHosts, authMode, canonicalUri, issuer })
   await new Promise<void>((resolve) => httpServer.listen(port, resolve))
   console.log(
-    `TodoCalendar MCP listening on :${port} (POST /mcp, GET /health, GET ${PROTECTED_RESOURCE_METADATA_PATH}) — stateless, auth=${authMode}`,
+    `TodoCalendar MCP listening on :${port} (POST /mcp, GET /health, GET ${PROTECTED_RESOURCE_METADATA_PATH}, GET /favicon.{ico,png}) — stateless, auth=${authMode}`,
   )
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
