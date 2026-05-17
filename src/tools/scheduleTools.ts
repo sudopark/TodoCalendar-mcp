@@ -32,7 +32,7 @@ export const getSchedules: ToolDefinition<GetSchedulesInput, GetSchedulesOutput>
   name: 'get_schedules',
   scopes: ['read:calendar'],
   description: `\
-Fetch schedules (calendar events) for the authenticated user that overlap the time range [lower, upper] (Unix epoch seconds, UTC).
+List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user that overlap a time range [lower, upper] (Unix epoch seconds, UTC) — use for "what's on my calendar today / this week / on date X".
 
 The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). 'exclude_repeatings' lists occurrence start timestamps that have been removed from the recurrence.`,
   inputSchema: getSchedulesInput,
