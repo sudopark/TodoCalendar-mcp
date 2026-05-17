@@ -5,7 +5,7 @@ AI agent가 TodoCalendar의 todo / schedule / tag 데이터를 다룰 수 있게
 두 진입점, 같은 tool layer:
 
 - **MCP server** (Streamable HTTP) — 외부 AI Agent용 (Claude Desktop 등)
-- **`@sudopark/todocalendar-tools`** — first-party AI 호스트가 직접 import해서 사용
+- **`@sudopark/todocalendar-tools`** (GitHub Packages, public) — first-party AI 호스트가 직접 import해서 사용
 
 ---
 
@@ -58,14 +58,13 @@ token에 필요한 scope이 박혀 있어야 함:
 
 ### Install
 
-GitHub Packages 인증 필요. 레포 root에 `.npmrc`:
+**Public 패키지** — install 시 인증 불필요. scope→registry 매핑만 있으면 됨.
+
+레포 root에 `.npmrc`:
 
 ```
 @sudopark:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
-
-`GITHUB_TOKEN`은 `read:packages` scope을 가진 personal access token.
 
 ```sh
 npm install @sudopark/todocalendar-tools

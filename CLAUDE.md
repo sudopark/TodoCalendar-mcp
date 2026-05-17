@@ -50,10 +50,10 @@ flowchart TB
 
 ## Two artifacts in this repo
 
-| 산출물                                 | 배포처          | 소비자                              |
-| -------------------------------------- | --------------- | ----------------------------------- |
-| **MCP server**                         | Cloud Run       | 외부 AI Agent (OAuth RS)            |
-| **npm library** (`todocalendar-tools`) | GitHub Packages | `TodoCalendar-Functions/aiFrontAPI` |
+| 산출물                                           | 배포처                   | 소비자                              |
+| ------------------------------------------------ | ------------------------ | ----------------------------------- |
+| **MCP server**                                   | Cloud Run                | 외부 AI Agent (OAuth RS)            |
+| **npm library** (`@sudopark/todocalendar-tools`) | GitHub Packages (public) | `TodoCalendar-Functions/aiFrontAPI` |
 
 운영: 단일 버전, 단일 릴리스. **CI/CD 자동화 없음 — `npm publish` + `gcloud run deploy` 둘 다 작업자가 수동.** integration test도 CI에 안 붙임 — PR 머지 전 작업자가 로컬 emulator 위에서 직접 `npm run test:integration` 실행.
 
