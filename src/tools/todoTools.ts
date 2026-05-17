@@ -80,12 +80,12 @@ export const getTodos: ToolDefinition<GetTodosInput, GetTodosOutput> = {
   name: 'get_todos',
   scopes: ['read:calendar'],
   description: `\
-Fetch todos for the authenticated user.
+List / fetch / show / retrieve / get todos (tasks, action items) for the authenticated user — supports pending, overdue, today, upcoming, and always-visible workflows via 'mode'.
 
 Three modes (specify exactly one via 'mode'):
-  - 'current': non-time-bound todos that should always remain visible until completed
-  - 'range': todos whose event_time falls within [lower, upper] (Unix epoch seconds, UTC)
-  - 'uncompleted': todos that are still uncompleted as of refTime (Unix epoch seconds, UTC)
+  - 'current': always-visible / sticky / pending / non-time-bound todos that stay listed until completed
+  - 'range': todos whose event_time falls within [lower, upper] (Unix epoch seconds, UTC) — use for "todos today / this week / on date X"
+  - 'uncompleted': overdue / past-due / still-open todos as of refTime (Unix epoch seconds, UTC) — use for "what's left to do as of a specific moment"
 
 All timestamps in the response are Unix epoch seconds (UTC). The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants).`,
   inputSchema: getTodosInput,

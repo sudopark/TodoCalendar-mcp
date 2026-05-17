@@ -17,7 +17,7 @@ export const getTags: ToolDefinition<GetTagsInput, GetTagsOutput> = {
   name: 'get_tags',
   scopes: ['read:calendar'],
   description:
-    'Fetch all event tags (categories) belonging to the authenticated user. Tags are reusable labels assigned to todos and schedules.',
+    'List / fetch / show / get all event tags (categories / labels / groupings) belonging to the authenticated user — call before creating or updating todos/schedules with a tag to discover available tag ids. Tags are reusable labels assigned to todos and schedules.',
   inputSchema: getTagsInput,
   outputSchema: getTagsOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetTagsOutput> => {

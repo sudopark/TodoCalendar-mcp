@@ -31,7 +31,7 @@ export const getEventDetails: ToolDefinition<GetEventDetailsInput, GetEventDetai
   name: 'get_event_details',
   scopes: ['read:calendar'],
   description: `\
-Fetch optional detail metadata (place, url, memo) for a specific event.
+Fetch / get / show extra detail metadata (place / location, url / link, memo / note) for a specific event — call after get_todos / get_schedules / get_done_todos when the user asks for more info about a single item.
 
 The active vs done routing is governed by the 'is_done' input flag — set it based on which list the event came from (get_todos / get_schedules → false; get_done_todos → true).`,
   inputSchema: getEventDetailsInput,
