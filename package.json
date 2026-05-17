@@ -1,5 +1,5 @@
 {
-  "name": "@sudopark/todocalendar-tools",
+  "name": "todocalendar-tools",
   "version": "0.1.1",
   "description": "TodoCalendar MCP server + tool library for AI agents",
   "type": "module",
@@ -27,9 +27,6 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
-  },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
   },
   "repository": {
     "type": "git",

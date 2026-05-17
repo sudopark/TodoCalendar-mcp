@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-24개 tool 구현 + unit/integration 테스트 + OAuth Resource Server까지 도달. 첫 외부 publish/배포 전. 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
+24개 tool 구현 + unit/integration 테스트 + OAuth Resource Server까지 도달. Cloud Run prod 배포 완료, npm 패키지는 npmjs.com `todocalendar-tools`로 publish (이슈 #47 — GitHub Packages에서 이전). 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
 
 ## What this is
 
@@ -23,7 +23,7 @@ flowchart TB
     ExtAgent["외부 AI Agent (Claude Desktop 등)"]
     AiFront["aiFrontAPI<br/>(Functions repo)<br/>Firebase Auth + Anthropic 루프"]
     OpenAPI["openAPI /v2/open/*<br/>(Functions repo)"]
-    Lib["todocalendar-tools<br/>(npm via GitHub Packages)<br/>tools/ = export 면"]
+    Lib["todocalendar-tools<br/>(npmjs.com, public)<br/>tools/ = export 면"]
     MCPServer["MCP server<br/>(Cloud Run, this repo)"]
     Anthropic["Anthropic API"]
 
@@ -50,12 +50,12 @@ flowchart TB
 
 ## Two artifacts in this repo
 
-| 산출물                                 | 배포처          | 소비자                              |
-| -------------------------------------- | --------------- | ----------------------------------- |
-| **MCP server**                         | Cloud Run       | 외부 AI Agent (OAuth RS)            |
-| **npm library** (`todocalendar-tools`) | GitHub Packages | `TodoCalendar-Functions/aiFrontAPI` |
+| 산출물                                 | 배포처             | 소비자                              |
+| -------------------------------------- | ------------------ | ----------------------------------- |
+| **MCP server**                         | Cloud Run          | 외부 AI Agent (OAuth RS)            |
+| **npm library** (`todocalendar-tools`) | npmjs.com (public) | `TodoCalendar-Functions/aiFrontAPI` |
 
-운영: 단일 버전, 단일 릴리스. **CI/CD 자동화 없음 — `npm publish` + `gcloud run deploy` 둘 다 작업자가 수동.** integration test도 CI에 안 붙임 — PR 머지 전 작업자가 로컬 emulator 위에서 직접 `npm run test:integration` 실행.
+운영: 단일 버전, 단일 릴리스. **CI/CD 자동화 없음 — `npm publish --access public` + `gcloud run deploy` 둘 다 작업자가 수동.** publish는 npmjs.com 디폴트 registry — 최초 1회 `npm adduser`로 로그인 후 매 publish 시 2FA OTP 입력. `.npmrc` registry override 불필요. integration test도 CI에 안 붙임 — PR 머지 전 작업자가 로컬 emulator 위에서 직접 `npm run test:integration` 실행.
 
 `package.json` `exports`가 외부 공개 면 — **`tools/`만** 노출. `server.ts`, `openapi/`, `confirm/`, `auth/`, `middleware/` 등 나머지는 전부 비공개. openapi 클라이언트나 confirm 토큰 모듈은 tool 안에서만 쓰이고, 직접 노출하면 다운스트림이 tool 레이어를 우회할 위험.
 
@@ -123,7 +123,7 @@ LLM이 raw를 해석하도록 돕는 채널은 **MCP가 LLM에 보내는 schema 
 [first-party — npm library import, MCP 우회]
   aiFrontAPI 안에서:
   → Firebase Auth 검증 → userId 획득
-  → import { tools, type Auth } from '@sudopark/todocalendar-tools/tools'
+  → import { tools, type Auth } from 'todocalendar-tools/tools'
   → 같은 tools[name].execute(auth, args) 직접 호출  // auth = { userId, scopes }
   → openapi/client.callOpenApi(...)
 ```
