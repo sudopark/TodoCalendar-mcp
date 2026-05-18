@@ -15,6 +15,7 @@ import { AuthInvariantError } from './errors.js'
 import { buildCallToolResult, buildErrorResult } from './result.js'
 import { toMcpTool } from './toolSchema.js'
 import { formatZodError } from './zodError.js'
+import packageJson from '../../package.json' with { type: 'json' }
 
 export type McpRequestExtra = RequestHandlerExtra<ServerRequest, ServerNotification>
 export type AuthResolver = (extra: McpRequestExtra) => Auth
@@ -55,7 +56,7 @@ const DEFAULT_MCP_TOOLS: readonly Tool[] = Object.values(defaultTools).map(toMcp
 export const createMcpServer = (options: CreateMcpServerOptions = {}): Server => {
   const tools = options.tools ?? defaultTools
   const resolveAuth = options.resolveAuth ?? resolveAuthFromExtra
-  const info = options.serverInfo ?? { name: 'todocalendar-mcp', version: '0.0.1' }
+  const info = options.serverInfo ?? { name: 'todocalendar-mcp', version: packageJson.version }
   const mcpTools =
     options.tools !== undefined ? Object.values(options.tools).map(toMcpTool) : DEFAULT_MCP_TOOLS
 
