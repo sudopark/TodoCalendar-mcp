@@ -42,6 +42,20 @@ const writeFavicon = (res: ServerResponse): void => {
   res.end(FAVICON_PNG_BYTES)
 }
 
+// 브라우저 기반 client(MCP Inspector 등)가 RS metadata·token endpoint를 fetch할 수 있도록
+// 모든 응답에 CORS 헤더를 박는다. RS는 Bearer 인증이라 credentials cookie 없음 → `*` 안전.
+// Expose-Headers는 WWW-Authenticate(OAuth challenge 노출) + Mcp-Session-Id(transport spec).
+const setCorsHeaders = (res: ServerResponse): void => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Authorization, Content-Type, Mcp-Session-Id, MCP-Protocol-Version, X-Dev-User-Id',
+  )
+  res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate, Mcp-Session-Id')
+  res.setHeader('Access-Control-Max-Age', '86400')
+}
+
 const writeMethodNotAllowed = (res: ServerResponse, allow: string): void => {
   res.statusCode = 405
   res.setHeader('content-type', 'application/json')
@@ -309,6 +323,12 @@ export const createHttpServer = (options: HttpServerOptions = {}): HttpServer =>
   const mode = options.authMode ?? 'oauth'
   const extractAuth = selectExtractor(mode)
   return http.createServer((req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204
+      res.end()
+      return
+    }
     const pathname = parsePathname(req)
 
     if (req.method === 'GET' && pathname === '/health') {
