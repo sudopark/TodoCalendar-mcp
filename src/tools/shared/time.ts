@@ -18,3 +18,51 @@ export const parseOffsetSeconds = (iso: string): number => {
   const minutes = Number(m[4])
   return sign * (hours * 3600 + minutes * 60)
 }
+
+const isNum = (v: unknown): v is number => typeof v === 'number'
+
+// 응답을 재귀 walk하며 알려진 시간 구조에만 *_iso 형제 필드를 additive로 추가.
+// raw ts는 그대로 보존. zod 안 씀(§6: outputSchema.parse 금지).
+export const augmentIso = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(augmentIso)
+  if (value === null || typeof value !== 'object') return value
+
+  const obj = value as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(obj)) out[k] = augmentIso(v)
+
+  // event_time (time_type 디스크리미네이터)
+  if (obj.time_type === 'at' && isNum(obj.timestamp)) {
+    out.timestamp_iso = tsToUtcIso(obj.timestamp)
+  } else if (obj.time_type === 'period' && isNum(obj.period_start) && isNum(obj.period_end)) {
+    out.period_start_iso = tsToUtcIso(obj.period_start)
+    out.period_end_iso = tsToUtcIso(obj.period_end)
+  } else if (
+    obj.time_type === 'allday' &&
+    isNum(obj.period_start) &&
+    isNum(obj.period_end) &&
+    isNum(obj.seconds_from_gmt)
+  ) {
+    out.period_start_iso = tsToLocalDate(obj.period_start, obj.seconds_from_gmt)
+    out.period_end_iso = tsToLocalDate(obj.period_end, obj.seconds_from_gmt)
+  }
+
+  // repeating (start + option 동시 존재로 식별)
+  if (isNum(obj.start) && 'option' in obj) {
+    out.start_iso = tsToUtcIso(obj.start)
+    if (isNum(obj.end)) out.end_iso = tsToUtcIso(obj.end)
+  }
+
+  // top-level scalar ts
+  if (isNum(obj.create_timestamp)) out.create_timestamp_iso = tsToUtcIso(obj.create_timestamp)
+  if (isNum(obj.done_at)) out.done_at_iso = tsToUtcIso(obj.done_at)
+
+  // exclude_repeatings: number[]
+  if (Array.isArray(obj.exclude_repeatings)) {
+    out.exclude_repeatings_iso = obj.exclude_repeatings
+      .filter(isNum)
+      .map((n) => tsToUtcIso(n))
+  }
+
+  return out
+}
