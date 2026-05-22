@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseOffsetSeconds, tsToLocalDate, tsToUtcIso } from '../../../src/tools/shared/time.js'
+import { augmentIso, parseOffsetSeconds, tsToLocalDate, tsToUtcIso } from '../../../src/tools/shared/time.js'
 
 describe('tsToUtcIso', () => {
   it('ts(초) → UTC ISO with Z', () => {
@@ -32,5 +32,63 @@ describe('parseOffsetSeconds', () => {
   })
   it('Z가 끝이 아닌 위치에 있으면 throw', () => {
     expect(() => parseOffsetSeconds('2026-05-22T00:00:00Zextra')).toThrow()
+  })
+})
+
+describe('augmentIso — event_time', () => {
+  it("at: timestamp_iso(UTC) 추가, raw 보존", () => {
+    const out = augmentIso({ event_time: { time_type: 'at', timestamp: 1_700_000_000 } }) as any
+    expect(out.event_time.timestamp).toBe(1_700_000_000)
+    expect(out.event_time.timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
+  })
+  it('period: period_start_iso/period_end_iso(UTC)', () => {
+    const out = augmentIso({
+      event_time: { time_type: 'period', period_start: 1_700_000_000, period_end: 1_700_003_600 },
+    }) as any
+    expect(out.event_time.period_start_iso).toBe('2023-11-14T22:13:20.000Z')
+    expect(out.event_time.period_end_iso).toBe('2023-11-14T23:13:20.000Z')
+  })
+  it('allday: seconds_from_gmt 적용한 로컬 날짜', () => {
+    const out = augmentIso({
+      event_time: {
+        time_type: 'allday',
+        period_start: 1_700_000_000,
+        period_end: 1_700_000_000,
+        seconds_from_gmt: 32_400,
+      },
+    }) as any
+    expect(out.event_time.period_start_iso).toBe('2023-11-15')
+    expect(out.event_time.period_end_iso).toBe('2023-11-15')
+  })
+})
+
+describe('augmentIso — 기타 구조', () => {
+  it('repeating: start_iso/end_iso', () => {
+    const out = augmentIso({
+      repeating: { start: 1_700_000_000, option: { optionType: 'every_day', interval: 1 }, end: 1_700_003_600 },
+    }) as any
+    expect(out.repeating.start_iso).toBe('2023-11-14T22:13:20.000Z')
+    expect(out.repeating.end_iso).toBe('2023-11-14T23:13:20.000Z')
+  })
+  it('top-level create_timestamp / done_at', () => {
+    const out = augmentIso({ create_timestamp: 1_700_000_000, done_at: 1_700_003_600 }) as any
+    expect(out.create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
+    expect(out.done_at_iso).toBe('2023-11-14T23:13:20.000Z')
+  })
+  it('exclude_repeatings 배열 → exclude_repeatings_iso 배열', () => {
+    const out = augmentIso({ exclude_repeatings: [1_700_000_000, 1_700_003_600] }) as any
+    expect(out.exclude_repeatings_iso).toEqual(['2023-11-14T22:13:20.000Z', '2023-11-14T23:13:20.000Z'])
+  })
+  it('배열 응답·중첩 객체 재귀 처리', () => {
+    const out = augmentIso([{ create_timestamp: 1_700_000_000 }]) as any
+    expect(out[0].create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
+  })
+  it('시간 필드 없으면 그대로 (notification_options 무변경)', () => {
+    const input = { notification_options: [{ type_text: 'before', before_seconds: 600 }] }
+    expect(augmentIso(input)).toEqual(input)
+  })
+  it('unknown 필드 보존 (raw passthrough)', () => {
+    const out = augmentIso({ create_timestamp: 1_700_000_000, extra: 'kept' }) as any
+    expect(out.extra).toBe('kept')
   })
 })
