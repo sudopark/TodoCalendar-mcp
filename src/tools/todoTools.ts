@@ -46,7 +46,7 @@ type GetTodosInput = z.infer<typeof getTodosInput>
 
 const getTodosOutput = z
   .array(todoSchema)
-  .describe('List of todos. All timestamps are Unix epoch seconds (UTC).')
+  .describe('List of todos. Raw Unix-second timestamps are preserved; every absolute-time field has a sibling `*_iso` field (UTC ISO; for `allday`, a YYYY-MM-DD local date).')
 
 type GetTodosOutput = z.infer<typeof getTodosOutput>
 
@@ -85,10 +85,10 @@ List / fetch / show / retrieve / get todos (tasks, action items) for the authent
 
 Three modes (specify exactly one via 'mode'):
   - 'current': always-visible / sticky / pending / non-time-bound todos that stay listed until completed
-  - 'range': todos whose event_time falls within [lower, upper] (Unix epoch seconds, UTC) — use for "todos today / this week / on date X"
-  - 'uncompleted': overdue / past-due / still-open todos as of refTime (Unix epoch seconds, UTC) — use for "what's left to do as of a specific moment"
+  - 'range': todos whose event_time falls within [lower, upper] (ISO 8601 with offset) — use for "todos today / this week / on date X"
+  - 'uncompleted': overdue / past-due / still-open todos as of refTime (ISO 8601 with offset) — use for "what's left to do as of a specific moment"
 
-All timestamps in the response are Unix epoch seconds (UTC). The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants).`,
+All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants).`,
   inputSchema: getTodosInput,
   outputSchema: getTodosOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetTodosOutput> => {
@@ -139,7 +139,7 @@ export const createTodo: ToolDefinition<CreateTodoInput, CreateTodoOutput> = {
   description: `\
 Create a new todo for the authenticated user. Returns the created todo with its assigned uuid.
 
-If 'event_time' is omitted the todo is created in 'current' mode (non-time-bound, always visible until completed). The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
+If 'event_time' is omitted the todo is created in 'current' mode (non-time-bound, always visible until completed). The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: createTodoInput,
   outputSchema: createTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<CreateTodoOutput> => {
@@ -189,7 +189,7 @@ export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
   description: `\
 Partially update a todo's fields (PATCH). Returns the full updated todo.
 
-Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: updateTodoInput,
   outputSchema: updateTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateTodoOutput> => {
@@ -255,7 +255,7 @@ export const completeTodo: ToolDefinition<CompleteTodoInput, CompleteTodoOutput>
   description: `\
 Mark a todo as completed. Returns the new done-todo record. For repeating todos, optionally advance to the next occurrence by passing 'next_event_time' and 'next_repeating_turn'.
 
-The 'origin' body field must be the full todo object (uuid, userId, name, etc.) — typically the payload returned by get_todos passed through verbatim. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC).`,
+The 'origin' body field must be the full todo object (uuid, userId, name, etc.) — typically the payload returned by get_todos passed through verbatim. The 'origin' field is the ts-based todo payload returned by get_todos — pass it through verbatim with raw Unix-second timestamps; do NOT convert origin's event_time fields to ISO strings. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: completeTodoInput,
   outputSchema: completeTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<CompleteTodoOutput> => {
@@ -316,7 +316,7 @@ Decision guide for the agent:
   - To replace a single occurrence of a repeating todo (other occurrences continue): set 'origin_next_event_time' to the next event_time of the origin so the origin advances past this turn.
   - To replace the entire repeating series (no more occurrences from origin): omit 'origin_next_event_time' — the origin is deleted after the new todo is created.
 
-The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC).`,
+The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: replaceTodoInput,
   outputSchema: replaceTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<ReplaceTodoOutput> => {

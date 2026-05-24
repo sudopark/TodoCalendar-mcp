@@ -25,7 +25,7 @@ const eventTimeAllDay = z.object({
 export const eventTimeSchema = z
   .discriminatedUnion('time_type', [eventTimeAt, eventTimePeriod, eventTimeAllDay])
   .describe(
-    "Tagged union by `time_type`: 'at' (single moment), 'period' (start..end), 'allday' (date range with timezone).",
+    "Tagged union by `time_type`: 'at' (single moment), 'period' (start..end), 'allday' (date range with timezone). Responses include the following `*_iso` siblings: 'at' → timestamp_iso (UTC ISO); 'period' → period_start_iso + period_end_iso (UTC ISO); 'allday' → period_start_iso + period_end_iso (YYYY-MM-DD local date computed from `seconds_from_gmt`). Raw Unix-second fields are preserved alongside.",
   )
 
 const ISO_DESC =
@@ -137,7 +137,7 @@ export const repeatingSchema = z
     end: z.number().nullish().describe(`${TS_SEC} Null if no end date.`),
     end_count: z.number().nullish().describe('Number of occurrences. Null if not capped by count.'),
   })
-  .describe('Recurrence rule with start, option payload, and optional end (date or count).')
+  .describe('Recurrence rule with start, option payload, and optional end (date or count). Responses also include `start_iso` / `end_iso` (UTC ISO).')
 
 export const todoSchema = z
   .object({
@@ -166,7 +166,7 @@ export const todoSchema = z
       .nullish()
       .describe('For repeating todos: identifier of the specific occurrence (turn).'),
   })
-  .describe('A todo item. All timestamps are Unix epoch seconds (UTC).')
+  .describe('A todo item. Raw Unix-second timestamps are preserved; responses also include `create_timestamp_iso` and `event_time` / `repeating` `*_iso` siblings (see those schemas).')
 
 export const doneTodoSchema = z
   .object({
@@ -182,7 +182,7 @@ export const doneTodoSchema = z
     event_tag_id: z.string().nullish(),
     notification_options: z.array(z.unknown()).nullish(),
   })
-  .describe('A completed (done) todo. All timestamps are Unix epoch seconds (UTC).')
+  .describe('A completed (done) todo. Raw Unix-second timestamps are preserved; responses also include `done_at_iso` and `event_time` `*_iso` siblings.')
 
 export const scheduleSchema = z
   .object({
@@ -203,10 +203,10 @@ export const scheduleSchema = z
       .array(z.number())
       .nullish()
       .describe(
-        `Occurrence start timestamps that are excluded from the recurrence. Each value is ${TS_SEC}`,
+        `Occurrence start timestamps that are excluded from the recurrence. Each value is a Unix epoch second. A sibling \`exclude_repeatings_iso: string[]\` (UTC ISO) is included in the response.`,
       ),
   })
-  .describe('A schedule (calendar event). All timestamps are Unix epoch seconds (UTC).')
+  .describe('A schedule (calendar event). Raw Unix-second timestamps are preserved; responses also include `event_time` / `repeating` `*_iso` siblings and `exclude_repeatings_iso` (UTC ISO array).')
 
 export const eventTagSchema = z
   .object({

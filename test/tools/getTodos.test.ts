@@ -169,7 +169,7 @@ describe('get_todos — error 자연어 wrap', () => {
 describe('get_todos — metadata', () => {
   it('name·description·schemas 노출', () => {
     expect(getTodos.name).toBe('get_todos')
-    expect(getTodos.description).toMatch(/Unix epoch seconds/)
+    expect(getTodos.description).toMatch(/ISO 8601/)
     expect(getTodos.inputSchema).toBeDefined()
     expect(getTodos.outputSchema).toBeDefined()
   })
