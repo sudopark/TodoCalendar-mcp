@@ -63,14 +63,28 @@ describe('update_done_todo — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ name: 'renamed' })
   })
 
-  it('event_time(period) + event_tag_id 동시 — body에 모두 포함', async () => {
+  it('event_time(at) ISO 입력 → ts body', async () => {
+    await updateDoneTodo.execute(auth, {
+      done_todo_id: 'done-1',
+      event_time: {
+        time_type: 'at',
+        timestamp: '2023-11-14T22:13:20Z',
+      },
+    })
+
+    expect(openApiSpy.lastBody).toEqual({
+      event_time: { time_type: 'at', timestamp: 1_700_000_000 },
+    })
+  })
+
+  it('event_time(period) ISO 입력 + event_tag_id — ts body에 모두 포함', async () => {
     await updateDoneTodo.execute(auth, {
       done_todo_id: 'done-1',
       event_tag_id: 'tag-2',
       event_time: {
         time_type: 'period',
-        period_start: 1_700_000_000,
-        period_end: 1_700_003_600,
+        period_start: '2023-11-14T22:13:20Z',
+        period_end: '2023-11-14T23:13:20Z',
       },
     })
 
@@ -90,7 +104,7 @@ describe('update_done_todo — happy path', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/done%2Fwith%20space')
   })
 
-  it('raw 응답 그대로 반환 (passthrough)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (passthrough)', async () => {
     const raw = {
       uuid: 'done-1',
       userId: 'u-1',
@@ -104,8 +118,12 @@ describe('update_done_todo — happy path', () => {
       done_todo_id: 'done-1',
       name: 'renamed',
     })
+    const r = result as Record<string, unknown>
 
-    expect(result).toEqual(raw)
+    // raw ts 보존 + unknown 필드 보존
+    expect(r).toMatchObject(raw)
+    // done_at_iso 추가
+    expect(r.done_at_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 
@@ -121,7 +139,17 @@ describe('update_done_todo — input validation', () => {
     await expect(
       updateDoneTodo.execute(auth, {
         done_todo_id: 'done-1',
-        event_time: { time_type: 'never', timestamp: 1 },
+        event_time: { time_type: 'never', timestamp: '2023-11-14T22:13:20Z' },
+      }),
+    ).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
+  })
+
+  it('event_time timestamp 잘못된 ISO — zod throw', async () => {
+    await expect(
+      updateDoneTodo.execute(auth, {
+        done_todo_id: 'done-1',
+        event_time: { time_type: 'at', timestamp: 'not-a-date' },
       }),
     ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
@@ -154,7 +182,7 @@ describe('update_done_todo — error wrap', () => {
     await expect(
       updateDoneTodo.execute(auth, {
         done_todo_id: 'done-1',
-        event_time: { time_type: 'at', timestamp: 1 },
+        event_time: { time_type: 'at', timestamp: '2023-11-14T22:13:20Z' },
       }),
     ).rejects.toThrow(/The request parameters are invalid\. \(event_time invalid\)/)
   })

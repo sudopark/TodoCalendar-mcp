@@ -62,7 +62,7 @@ describe('get_done_todos', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=30')
   })
 
-  it('cursor 있으면 size+cursor 둘 다', async () => {
+  it('cursor 있으면 size+cursor 둘 다 (cursor는 숫자 그대로 — 회귀 가드)', async () => {
     await getDoneTodos.execute(auth, { size: 20, cursor: 1_700_000_000 })
 
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/?size=20&cursor=1700000000')
@@ -96,19 +96,28 @@ describe('get_done_todos', () => {
     expect(openApiSpy.callCount).toBe(0)
   })
 
-  it('raw 응답 통과 — DoneTodo[] 배열 그대로', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (DoneTodo[] 배열)', async () => {
     const raw = [
       {
         uuid: 'd-1',
         userId: 'u-1',
         name: '완료',
         done_at: 1_700_000_000,
+        event_time: { time_type: 'at', timestamp: 1_700_003_600 },
       },
     ]
     openApiSpy.responsePayload = raw
 
     const result = await getDoneTodos.execute(auth, { size: 1 })
+    const r0 = (result as unknown[])[0] as Record<string, unknown>
 
-    expect(result).toEqual(raw)
+    // raw ts 보존
+    expect(r0).toMatchObject(raw[0]!)
+    // done_at_iso 추가
+    expect(r0.done_at_iso).toBe('2023-11-14T22:13:20.000Z')
+    // event_time.timestamp_iso 추가
+    const et = r0.event_time as Record<string, unknown>
+    expect(et.timestamp).toBe(1_700_003_600)
+    expect(et.timestamp_iso).toBe('2023-11-14T23:13:20.000Z')
   })
 })
