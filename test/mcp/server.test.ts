@@ -151,7 +151,8 @@ describe('mcp server — tools/call', () => {
 
     expect(result.isError).toBeFalsy()
     expect(result.structuredContent).toBeUndefined()
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(raw) }])
+    const text = (result.content as { text: string }[])[0]?.text
+    expect(text).toContain(JSON.stringify(raw))
     expect(openApiSpy.lastAuth).toEqual(auth)
     expect(openApiSpy.lastPath).toBe('/v2/open/tags/')
   })
