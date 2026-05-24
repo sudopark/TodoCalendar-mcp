@@ -68,21 +68,22 @@ describe('replace_todo — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ new: newTodo })
   })
 
-  it('new + origin_next_event_time — body 모두 포함', async () => {
-    const newTodo = {
-      name: 'replacement',
-      event_time: { time_type: 'at' as const, timestamp: 1_700_003_600 },
-    }
-    const nextEventTime = { time_type: 'at' as const, timestamp: 1_700_086_400 }
+  it('new + origin_next_event_time — ISO 입력 → ts body 모두 포함', async () => {
     await replaceTodo.execute(auth, {
       todo_id: 't-origin',
-      new: newTodo,
-      origin_next_event_time: nextEventTime,
+      new: {
+        name: 'replacement',
+        event_time: { time_type: 'at' as const, timestamp: '2023-11-14T23:13:20Z' },
+      },
+      origin_next_event_time: { time_type: 'at' as const, timestamp: '2023-11-15T22:13:20Z' },
     })
 
     expect(openApiSpy.lastBody).toEqual({
-      new: newTodo,
-      origin_next_event_time: nextEventTime,
+      new: {
+        name: 'replacement',
+        event_time: { time_type: 'at', timestamp: 1_700_003_600 },
+      },
+      origin_next_event_time: { time_type: 'at', timestamp: 1_700_086_400 },
     })
   })
 
@@ -95,7 +96,7 @@ describe('replace_todo — happy path', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/t%2Fwith%20space/replace')
   })
 
-  it('raw 응답 그대로 반환 (passthrough)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (extra 필드 보존)', async () => {
     const raw = {
       new_todo: {
         uuid: 't-new',
@@ -121,7 +122,11 @@ describe('replace_todo — happy path', () => {
       new: { name: 'replacement' },
     })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
+    const newTodo = (result as Record<string, unknown>).new_todo as Record<string, unknown>
+    expect(newTodo.create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
+    const nextRep = (result as Record<string, unknown>).next_repeating as Record<string, unknown>
+    expect(nextRep.create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 

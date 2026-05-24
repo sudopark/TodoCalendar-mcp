@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { toMcpTool } from '../../src/mcp/toolSchema.js'
+import { toMcpInputSchema } from '../../src/mcp/toolSchema.js'
 import type { AnyToolDefinition, ToolDefinition } from '../../src/tools/index.js'
 
 const stub = <I, O>(over: Partial<ToolDefinition<I, O>>): ToolDefinition<I, O> => ({
@@ -114,5 +115,27 @@ describe('toMcpTool', () => {
     const tool = toMcpTool(def)
     expect(tool.name).toBe('do_thing')
     expect(tool.description).toBe('does the thing')
+  })
+})
+
+describe('toMcpInputSchema', () => {
+  it('transform 스키마 — { io: "input" }로 pre-transform 노출, throw 안 함', () => {
+    // z.toJSONSchema(transform schema)는 기본값에서 throw.
+    // ISO입력→timestamp 변환 스키마들이 { io: 'input' }에 의존.
+    // 옵션 누락 회귀 감지 테스트.
+    const transformSchema = z.object({
+      when: z.string().transform((s) => Math.floor(Date.parse(s) / 1000)),
+    })
+
+    expect(() => toMcpInputSchema(transformSchema)).not.toThrow()
+
+    const result = toMcpInputSchema(transformSchema)
+    expect(result.type).toBe('object')
+    expect(result.properties).toBeDefined()
+    const whenProp = (result.properties as Record<string, unknown>)['when']
+    expect(whenProp).toMatchObject({ type: 'string' })
+    // post-transform (number)이 아니라 pre-transform (string) 노출 확인
+    expect((whenProp as Record<string, unknown>).type).not.toBe('integer')
+    expect((whenProp as Record<string, unknown>).type).not.toBe('number')
   })
 })
