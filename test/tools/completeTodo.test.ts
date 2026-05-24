@@ -70,17 +70,16 @@ describe('complete_todo — happy path', () => {
   })
 
   it('반복 todo — origin + next_event_time + next_repeating_turn 모두 body 포함', async () => {
-    const nextEventTime = { time_type: 'at' as const, timestamp: 1_700_086_400 }
     await completeTodo.execute(auth, {
       todo_id: 't-1',
       origin: originTodo,
-      next_event_time: nextEventTime,
+      next_event_time: { time_type: 'at' as const, timestamp: '2023-11-15T22:13:20Z' },
       next_repeating_turn: 'turn-2',
     })
 
     expect(openApiSpy.lastBody).toEqual({
       origin: originTodo,
-      next_event_time: nextEventTime,
+      next_event_time: { time_type: 'at', timestamp: 1_700_086_400 },
       next_repeating_turn: 'turn-2',
     })
   })
@@ -94,10 +93,10 @@ describe('complete_todo — happy path', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/todo%2Fwith%20space/complete')
   })
 
-  it('raw 응답 그대로 반환 (passthrough — next_repeating·done_detail 포함)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (next_repeating·done_detail·extra 보존)', async () => {
     const raw = {
-      done: { uuid: 'done-1', userId: 'u-1', name: 'task' },
-      next_repeating: { uuid: 't-2', userId: 'u-1', name: 'task' },
+      done: { uuid: 'done-1', userId: 'u-1', name: 'task', done_at: 1_700_000_000 },
+      next_repeating: { uuid: 't-2', userId: 'u-1', name: 'task', create_timestamp: 1_700_000_000 },
       done_detail: { place: null, url: null, memo: 'note' },
       extra_unknown_field: 'kept',
     }
@@ -105,7 +104,14 @@ describe('complete_todo — happy path', () => {
 
     const result = await completeTodo.execute(auth, { todo_id: 't-1', origin: originTodo })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject({
+      done: { uuid: 'done-1', userId: 'u-1', name: 'task', done_at: 1_700_000_000 },
+      next_repeating: { uuid: 't-2', create_timestamp: 1_700_000_000 },
+      done_detail: { place: null, url: null, memo: 'note' },
+      extra_unknown_field: 'kept',
+    })
+    const done = (result as Record<string, unknown>).done as Record<string, unknown>
+    expect(done.done_at_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 
@@ -168,7 +174,7 @@ describe('complete_todo — error wrap', () => {
       completeTodo.execute(auth, {
         todo_id: 't-1',
         origin: originTodo,
-        next_event_time: { time_type: 'at', timestamp: 1 },
+        next_event_time: { time_type: 'at', timestamp: '2023-11-14T22:13:20Z' },
       }),
     ).rejects.toThrow(/The request parameters are invalid\. \(next_event_time invalid\)/)
   })

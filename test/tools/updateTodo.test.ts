@@ -65,11 +65,11 @@ describe('update_todo — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ name: 'renamed' })
   })
 
-  it('event_time(at) + event_tag_id 동시 — body에 모두 포함', async () => {
+  it('event_time(at) + event_tag_id 동시 — ISO 입력 → ts body에 모두 포함', async () => {
     await updateTodo.execute(auth, {
       todo_id: 't-1',
       event_tag_id: 'tag-2',
-      event_time: { time_type: 'at', timestamp: 1_700_003_600 },
+      event_time: { time_type: 'at', timestamp: '2023-11-14T23:13:20Z' },
     })
 
     expect(openApiSpy.lastBody).toEqual({
@@ -78,19 +78,24 @@ describe('update_todo — happy path', () => {
     })
   })
 
-  it('repeating + notification_options — opaque 객체 통과', async () => {
-    const repeating = {
-      start: 1_700_000_000,
-      option: { optionType: 'every_day', interval: 1 },
-    }
+  it('repeating + notification_options — ISO 입력 → ts body', async () => {
     const notifs = [{ type: 'at_time' }]
     await updateTodo.execute(auth, {
       todo_id: 't-1',
-      repeating,
+      repeating: {
+        start: '2023-11-14T22:13:20Z',
+        option: { optionType: 'every_day', interval: 1 },
+      },
       notification_options: notifs,
     })
 
-    expect(openApiSpy.lastBody).toEqual({ repeating, notification_options: notifs })
+    expect(openApiSpy.lastBody).toEqual({
+      repeating: {
+        start: 1_700_000_000,
+        option: { optionType: 'every_day', interval: 1 },
+      },
+      notification_options: notifs,
+    })
   })
 
   it('todo_id URL 인코딩 — 슬래시·공백 escape', async () => {
@@ -99,7 +104,7 @@ describe('update_todo — happy path', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/evt%2Fwith%20space')
   })
 
-  it('raw 응답 그대로 반환 (passthrough)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (extra 필드도 보존)', async () => {
     const raw = {
       uuid: 't-1',
       userId: 'u-1',
@@ -112,7 +117,8 @@ describe('update_todo — happy path', () => {
 
     const result = await updateTodo.execute(auth, { todo_id: 't-1', name: 'renamed' })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
+    expect((result as Record<string, unknown>).create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 
@@ -155,7 +161,7 @@ describe('update_todo — error wrap', () => {
     await expect(
       updateTodo.execute(auth, {
         todo_id: 't-1',
-        event_time: { time_type: 'at', timestamp: 1 },
+        event_time: { time_type: 'at', timestamp: '2023-11-14T22:13:20Z' },
       }),
     ).rejects.toThrow(/The request parameters are invalid\. \(event_time invalid\)/)
   })

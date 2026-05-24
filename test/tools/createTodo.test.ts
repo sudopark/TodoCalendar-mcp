@@ -65,10 +65,10 @@ describe('create_todo — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ name: 'inbox-task' })
   })
 
-  it('event_time(at) — discriminated union 통과', async () => {
+  it('event_time(at) — ISO 입력 → ts body', async () => {
     await createTodo.execute(auth, {
       name: 'lunch',
-      event_time: { time_type: 'at', timestamp: 1_700_003_600 },
+      event_time: { time_type: 'at', timestamp: '2023-11-14T23:13:20Z' },
     })
 
     expect(openApiSpy.lastBody).toEqual({
@@ -77,14 +77,14 @@ describe('create_todo — happy path', () => {
     })
   })
 
-  it('event_time(period) + event_tag_id — 모두 body에 포함', async () => {
+  it('event_time(period) + event_tag_id — ISO 입력 → ts body에 모두 포함', async () => {
     await createTodo.execute(auth, {
       name: 'workshop',
       event_tag_id: 'tag-1',
       event_time: {
         time_type: 'period',
-        period_start: 1_700_000_000,
-        period_end: 1_700_003_600,
+        period_start: '2023-11-14T22:13:20Z',
+        period_end: '2023-11-14T23:13:20Z',
       },
     })
 
@@ -99,26 +99,28 @@ describe('create_todo — happy path', () => {
     })
   })
 
-  it('repeating + notification_options — opaque 객체 통과', async () => {
-    const repeating = {
-      start: 1_700_000_000,
-      option: { optionType: 'every_day', interval: 1 },
-    }
+  it('repeating + notification_options — ISO 입력 → ts body', async () => {
     const notifs = [{ type: 'at_time' }]
     await createTodo.execute(auth, {
       name: 'daily-standup',
-      repeating,
+      repeating: {
+        start: '2023-11-14T22:13:20Z',
+        option: { optionType: 'every_day', interval: 1 },
+      },
       notification_options: notifs,
     })
 
     expect(openApiSpy.lastBody).toEqual({
       name: 'daily-standup',
-      repeating,
+      repeating: {
+        start: 1_700_000_000,
+        option: { optionType: 'every_day', interval: 1 },
+      },
       notification_options: notifs,
     })
   })
 
-  it('raw 응답 그대로 반환 (passthrough — userId 등 보존)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (userId·extra 필드도 보존)', async () => {
     const raw = {
       uuid: 't-9',
       userId: 'u-1',
@@ -131,7 +133,8 @@ describe('create_todo — happy path', () => {
 
     const result = await createTodo.execute(auth, { name: 'preserved' })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
+    expect((result as Record<string, unknown>).create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 
