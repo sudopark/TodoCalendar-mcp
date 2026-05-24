@@ -126,6 +126,6 @@ describe('get_schedules', () => {
 
   it('metadata', () => {
     expect(getSchedules.name).toBe('get_schedules')
-    expect(getSchedules.description).toMatch(/Unix epoch seconds/)
+    expect(getSchedules.description).toMatch(/ISO 8601/)
   })
 })

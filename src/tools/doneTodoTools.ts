@@ -52,7 +52,7 @@ export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput>
   description: `\
 List / fetch / show / get completed (done / finished / closed / past) todos for the authenticated user — history of what's been checked off, ordered by completion time (newest first), paginated by cursor.
 
-Response is an array of done todos. For pagination, pass the last item's 'done_at' as 'cursor' on the next call (cursor is excluded — items strictly older than cursor are returned). When the returned array length is less than 'size', there are no more pages. All timestamps in the response are Unix epoch seconds (UTC).`,
+Response is an array of done todos. For pagination, pass the last item's 'done_at' as 'cursor' on the next call (cursor is excluded — items strictly older than cursor are returned). When the returned array length is less than 'size', there are no more pages. All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The \`cursor\` pagination field is the raw ts value (Unix seconds) echoed from a previous response's \`done_at\`, not an ISO string.`,
   inputSchema: getDoneTodosInput,
   outputSchema: getDoneTodosOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetDoneTodosOutput> => {
@@ -97,7 +97,7 @@ export const updateDoneTodo: ToolDefinition<UpdateDoneTodoInput, UpdateDoneTodoO
   description: `\
 Update editable fields of a completed (done) todo: name, event_time, event_tag_id. Returns the updated done todo.
 
-The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC). To bring a done todo back to the active list, use revert_done_todo instead.`,
+The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. To bring a done todo back to the active list, use revert_done_todo instead.`,
   inputSchema: updateDoneTodoInput,
   outputSchema: updateDoneTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateDoneTodoOutput> => {

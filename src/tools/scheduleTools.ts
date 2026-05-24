@@ -32,9 +32,9 @@ export const getSchedules: ToolDefinition<GetSchedulesInput, GetSchedulesOutput>
   name: 'get_schedules',
   scopes: ['read:calendar'],
   description: `\
-List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user that overlap a time range [lower, upper] (Unix epoch seconds, UTC) — use for "what's on my calendar today / this week / on date X".
+List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user that overlap a time range [lower, upper] (ISO 8601 with offset) — use for "what's on my calendar today / this week / on date X".
 
-The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). 'exclude_repeatings' lists occurrence start timestamps that have been removed from the recurrence.`,
+All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). 'exclude_repeatings' lists occurrence start timestamps that have been removed from the recurrence.`,
   inputSchema: getSchedulesInput,
   outputSchema: getSchedulesOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetSchedulesOutput> => {
@@ -90,7 +90,7 @@ export const createSchedule: ToolDefinition<CreateScheduleInput, CreateScheduleO
   description: `\
 Create a new schedule (calendar event) for the authenticated user. Returns the created schedule with its assigned uuid.
 
-Unlike todos, schedules require an 'event_time'. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
+Unlike todos, schedules require an 'event_time'. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: createScheduleInput,
   outputSchema: createScheduleOutput,
   execute: async (auth: Auth, args: unknown): Promise<CreateScheduleOutput> => {
@@ -146,7 +146,7 @@ export const updateSchedule: ToolDefinition<UpdateScheduleInput, UpdateScheduleO
   description: `\
 Partially update a schedule's fields (PATCH). Returns the full updated schedule.
 
-Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input timestamps are Unix epoch seconds (UTC).`,
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: updateScheduleInput,
   outputSchema: updateScheduleOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateScheduleOutput> => {
@@ -197,7 +197,7 @@ Decision guide for the agent:
   - To replace that occurrence with a one-off schedule (different fields), use replace_schedule_occurrence instead.
   - To switch the recurrence rule itself from a certain point forward (e.g. daily → weekly starting next Monday), use branch_schedule_repeating.
 
-All timestamps are Unix epoch seconds (UTC).`,
+All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: excludeScheduleOccurrenceInput,
   outputSchema: excludeScheduleOccurrenceOutput,
   execute: async (
@@ -261,7 +261,7 @@ Decision guide for the agent:
   - To merely cancel/skip an occurrence without a replacement, use exclude_schedule_occurrence.
   - To switch the recurrence rule itself from a certain point forward (e.g. daily → weekly starting next Monday), use branch_schedule_repeating.
 
-The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC).`,
+The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: replaceScheduleOccurrenceInput,
   outputSchema: replaceScheduleOccurrenceOutput,
   execute: async (
@@ -326,7 +326,7 @@ Decision guide for the agent:
   - To replace only one occurrence while keeping the recurrence, use replace_schedule_occurrence.
   - To skip one occurrence with no replacement, use exclude_schedule_occurrence.
 
-All timestamps are Unix epoch seconds (UTC).`,
+All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: branchScheduleRepeatingInput,
   outputSchema: branchScheduleRepeatingOutput,
   execute: async (
