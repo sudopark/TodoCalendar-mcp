@@ -82,11 +82,11 @@ const methodNotAllowed: RequestHandler = (_req, res) => {
 
 // express.json / 기타 미들웨어가 throw한 에러를 JSON-RPC envelope으로 매핑.
 // SDK가 직접 파싱했을 때와 contract 통일.
-const jsonRpcErrorHandler: ErrorRequestHandler = (err, _req, res, next) => {
-  if (res.headersSent) {
-    next(err)
-    return
-  }
+const jsonRpcErrorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  // 응답 헤더가 이미 나간 상태(streaming 도중 throw 등)에선 추가 응답 시도 불가 — silent swallow.
+  // default handler에 위임하면 stack trace 로그 noise만 더해지므로 명시적으로 멈춘다.
+  if (res.headersSent) return
+
   const e = err as { type?: string; status?: number; statusCode?: number }
   const status = e.status ?? e.statusCode
   if (e.type === 'entity.too.large' || status === 413) {
@@ -105,8 +105,10 @@ const jsonRpcErrorHandler: ErrorRequestHandler = (err, _req, res, next) => {
     })
     return
   }
-  const message = err instanceof Error ? err.message : String(err)
-  res.status(500).json({ error: 'internal_error', message })
+  // 내부 정보(stack trace, env 키 이름, DB 에러 등) 외부 누출 방지 — err.message는 서버 로그로만,
+  // 응답 body는 generic 코드만 노출. #62 보안 리뷰.
+  console.error('[internal_error]', err)
+  res.status(500).json({ error: 'internal_error' })
 }
 
 export const createHttpServer = (options: HttpServerOptions = {}): HttpServer => {

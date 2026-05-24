@@ -416,6 +416,22 @@ describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1
     expect(body.error.message).toMatch(/too large/i)
   })
 
+  it('extractor 일반 Error throw — 500 + body에 err.message 노출 없음 (#62 보안 리뷰)', async () => {
+    // verifyOAuthToken이 OAuthTokenError가 아닌 일반 Error로 throw하면 mcpAuth가 next(e)로 위임,
+    // jsonRpcErrorHandler fallback이 500을 응답한다. 이때 err.message가 body에 그대로 실리면
+    // env 키 이름·JWKS URL·내부 stack 정보 등이 LLM client에 흘러갈 수 있어 generic 코드만 노출해야 함.
+    verifyOAuthTokenMock.mockRejectedValue(new Error('internal: DB_URL=postgres://...'))
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer x.y.z' },
+      body: '{}',
+    })
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as Record<string, unknown>
+    expect(body).toEqual({ error: 'internal_error' })
+    expect(body['message']).toBeUndefined()
+  })
+
   it('정상 token — auth gate 통과 (initialize 200)', async () => {
     verifyOAuthTokenMock.mockResolvedValue({
       userId: 'oauth-user-1',
