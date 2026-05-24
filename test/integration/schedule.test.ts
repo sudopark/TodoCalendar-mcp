@@ -24,11 +24,13 @@ type ReplaceScheduleResult = z.infer<typeof replaceScheduleOccurrenceOutput>
 type BranchScheduleResult = z.infer<typeof branchScheduleRepeatingOutput>
 
 // schedule은 todo와 달리 event_time 필수. 기본 시간 fixture.
-const T1 = 1_700_000_000 // 2023-11-14T22:13:20Z (UTC) — fixture epoch
-const NEXT_OCCURRENCE = T1 + 86_400 // daily 룰의 다음 occurrence start (T1+1day)
-const atTime = (timestamp: number) => ({ time_type: 'at' as const, timestamp })
-const dailyFrom = (start: number) => ({
-  start,
+// T1 = 2023-11-14T22:13:20Z (Unix 1_700_000_000), NEXT_OCCURRENCE = T1+1day
+const T1_ISO = '2023-11-14T22:13:20Z'
+const NEXT_OCCURRENCE_ISO = '2023-11-15T22:13:20Z' // T1 + 86_400s
+const NEXT_OCCURRENCE_TS = 1_700_000_000 + 86_400 // numeric: response assertion용
+const atTime = (iso: string) => ({ time_type: 'at' as const, timestamp: iso })
+const dailyFrom = (iso: string) => ({
+  start: iso,
   option: { optionType: 'every_day' as const, interval: 1 },
 })
 
@@ -37,7 +39,7 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     const auth = makeIntegrationAuth()
     const created = (await createSchedule.execute(auth, {
       name: 'integration-create',
-      event_time: atTime(T1),
+      event_time: atTime(T1_ISO),
     })) as Schedule
     expect(created).toMatchObject({ userId: auth.userId, name: 'integration-create' })
     expect(typeof created.uuid).toBe('string')
@@ -45,11 +47,11 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
 
   it('get_schedules — 시드 schedule이 [lower, upper] 범위에 포함', async () => {
     const auth = makeIntegrationAuth()
-    await createSchedule.execute(auth, { name: 'in-range', event_time: atTime(T1) })
+    await createSchedule.execute(auth, { name: 'in-range', event_time: atTime(T1_ISO) })
 
     const list = (await getSchedules.execute(auth, {
-      lower: T1 - 1000,
-      upper: T1 + 1000,
+      lower: '2023-11-14T21:56:40Z', // T1 - 1000s
+      upper: '2023-11-14T22:29:40Z', // T1 + 1000s
     })) as Schedule[]
     expect(list.some((s) => s.name === 'in-range')).toBe(true)
   })
@@ -58,7 +60,7 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     const auth = makeIntegrationAuth()
     const created = (await createSchedule.execute(auth, {
       name: 'before',
-      event_time: atTime(T1),
+      event_time: atTime(T1_ISO),
     })) as Schedule
 
     const updated = (await updateSchedule.execute(auth, {
@@ -76,16 +78,16 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     const auth = makeIntegrationAuth()
     const origin = (await createSchedule.execute(auth, {
       name: 'repeating-origin',
-      event_time: atTime(T1),
-      repeating: dailyFrom(T1),
+      event_time: atTime(T1_ISO),
+      repeating: dailyFrom(T1_ISO),
     })) as Schedule
 
     const result = (await excludeScheduleOccurrence.execute(auth, {
       schedule_id: origin.uuid,
-      exclude_repeatings: NEXT_OCCURRENCE,
+      exclude_repeatings: NEXT_OCCURRENCE_ISO,
     })) as Schedule
     expect(result.uuid).toBe(origin.uuid)
-    expect(result.exclude_repeatings).toEqual(expect.arrayContaining([NEXT_OCCURRENCE]))
+    expect(result.exclude_repeatings).toEqual(expect.arrayContaining([NEXT_OCCURRENCE_TS]))
   })
 
   it('replace_schedule_occurrence — daily 룰의 occurrence 정렬 슬롯을 one-off로 교체', async () => {
@@ -94,18 +96,18 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     const auth = makeIntegrationAuth()
     const origin = (await createSchedule.execute(auth, {
       name: 'repeating-origin',
-      event_time: atTime(T1),
-      repeating: dailyFrom(T1),
+      event_time: atTime(T1_ISO),
+      repeating: dailyFrom(T1_ISO),
     })) as Schedule
 
     const result = (await replaceScheduleOccurrence.execute(auth, {
       schedule_id: origin.uuid,
-      new: { name: 'one-off-replacement', event_time: atTime(NEXT_OCCURRENCE) },
-      exclude_repeatings: NEXT_OCCURRENCE,
+      new: { name: 'one-off-replacement', event_time: atTime(NEXT_OCCURRENCE_ISO) },
+      exclude_repeatings: NEXT_OCCURRENCE_ISO,
     })) as ReplaceScheduleResult
     expect(result.updated_origin.uuid).toBe(origin.uuid)
     expect(result.updated_origin.exclude_repeatings).toEqual(
-      expect.arrayContaining([NEXT_OCCURRENCE]),
+      expect.arrayContaining([NEXT_OCCURRENCE_TS]),
     )
     expect(result.new_schedule.name).toBe('one-off-replacement')
   })
@@ -114,14 +116,14 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     const auth = makeIntegrationAuth()
     const origin = (await createSchedule.execute(auth, {
       name: 'origin-daily',
-      event_time: atTime(T1),
-      repeating: dailyFrom(T1),
+      event_time: atTime(T1_ISO),
+      repeating: dailyFrom(T1_ISO),
     })) as Schedule
 
     const result = (await branchScheduleRepeating.execute(auth, {
       schedule_id: origin.uuid,
-      new: { name: 'branch-weekly', event_time: atTime(NEXT_OCCURRENCE) },
-      end_time: NEXT_OCCURRENCE,
+      new: { name: 'branch-weekly', event_time: atTime(NEXT_OCCURRENCE_ISO) },
+      end_time: NEXT_OCCURRENCE_ISO,
     })) as BranchScheduleResult
     expect(result.new.name).toBe('branch-weekly')
     expect(result.origin.uuid).toBe(origin.uuid)
@@ -131,7 +133,7 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     const auth = makeIntegrationAuth()
     const created = (await createSchedule.execute(auth, {
       name: 'to-delete',
-      event_time: atTime(T1),
+      event_time: atTime(T1_ISO),
     })) as Schedule
 
     const step1 = (await deleteSchedule.execute(auth, { schedule_id: created.uuid })) as {
