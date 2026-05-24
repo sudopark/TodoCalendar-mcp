@@ -1,6 +1,6 @@
 {
   "name": "todocalendar-tools",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "TodoCalendar MCP server + tool library for AI agents",
   "type": "module",
   "engines": {

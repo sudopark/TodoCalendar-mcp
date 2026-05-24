@@ -107,6 +107,11 @@ LLM이 raw를 해석하도록 돕는 채널은 **MCP가 LLM에 보내는 schema 
 
 예외는 **에러**: `InvalidParameter` / `NotFound` / `InsufficientScope` 등 코드는 자연어 메시지로 보강. 단 `code`·`status`는 `ToolError`에 그대로 보존 — 호출자가 분기·재시도·로그 분류에 쓰므로 자연어 메시지는 *추가*되는 면이지 대체되는 면이 아니다. 에러는 round-trip 대상 아니므로 보강해도 무손실 깨지지 않음.
 
+**시간 입출력 ISO 정책 (2026-05-22, [`docs/superpowers/specs/2026-05-22-time-iso-conversion-design.md`]):**
+사용자/LLM이 authoring하는 절대시간 **입력** 필드는 ISO 8601(offset 포함) 문자열로 받고, 서버가 zod `.transform()`으로 Unix seconds로 변환한다 — LLM이 epoch을 직접 계산하지 않도록 검증 가능한 표현을 채택. **출력**은 raw ts를 그대로 보존하면서 `*_iso` 파생 필드(`timestamp_iso` / `period_start_iso` / `period_end_iso` / `start_iso` / `end_iso` / `create_timestamp_iso` / `done_at_iso` / `exclude_repeatings_iso`)를 additive로 함께 노출한다. 추가는 runtime `augmentIso` walker로 수행(`outputSchema.parse()` 금지 원칙 유지). raw 필드가 그대로 살아있어 round-trip·감사로그 무손실 약속은 깨지지 않는다.
+
+예외 (ts 유지): `complete_todo.origin`(이전 `get_todos` 응답 echo), `get_done_todos.cursor`(이전 `done_at` echo). 이들은 사용자 authoring이 아니라 출력의 ts를 그대로 되돌리는 통로이므로 ISO 변환 대상 아님.
+
 ### 7. Library export 면을 좁게 유지, breaking은 major 버전
 
 `exports`에 노출된 모듈은 `aiFrontAPI`가 핀하므로 함부로 깨면 다운스트림이 부러진다. 시그니처 / 타입 / 반환 구조 변경은 semver major. 서버 내부는 export 안 하므로 자유롭게 변경.
