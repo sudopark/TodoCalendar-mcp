@@ -5,18 +5,18 @@ import { wrapOpenApiError } from './shared/errors.js'
 import { buildConfirmRequired, ensureConfirmToken } from './shared/confirm.js'
 import {
   confirmableStatusSchema,
-  eventTimeSchema,
-  repeatingSchema,
+  eventTimeInputSchema,
+  isoToTsField,
+  repeatingInputSchema,
   scheduleSchema,
 } from './shared/schemas.js'
+import { augmentIso } from './shared/time.js'
 import type { ToolDefinition } from './shared/tool.js'
-
-const TS_SEC = 'Unix epoch seconds (UTC).'
 
 const getSchedulesInput = z
   .object({
-    lower: z.number().describe(`Range start (inclusive). ${TS_SEC}`),
-    upper: z.number().describe(`Range end (inclusive). ${TS_SEC}`),
+    lower: isoToTsField.describe('Range start (inclusive). ISO 8601 datetime with offset.'),
+    upper: isoToTsField.describe('Range end (inclusive). ISO 8601 datetime with offset.'),
   })
   .describe('Both lower and upper are required (no current/uncompleted modes for schedules).')
 
@@ -41,11 +41,9 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
     const { lower, upper } = getSchedulesInput.parse(args)
     const qs = new URLSearchParams({ lower: String(lower), upper: String(upper) })
     try {
-      return await callOpenApi<GetSchedulesOutput>(
-        auth,
-        'GET',
-        `/v2/open/schedules/?${qs.toString()}`,
-      )
+      return augmentIso(
+        await callOpenApi<GetSchedulesOutput>(auth, 'GET', `/v2/open/schedules/?${qs.toString()}`),
+      ) as GetSchedulesOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
@@ -55,14 +53,14 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
 const scheduleInputSchema = z
   .object({
     name: z.string().min(1).describe('Display name for the schedule (non-empty).'),
-    event_time: eventTimeSchema.describe(
+    event_time: eventTimeInputSchema.describe(
       "Required. Tagged union by 'time_type' ('at' | 'period' | 'allday'). Unlike todos, schedules must always have a time.",
     ),
     event_tag_id: z
       .string()
       .optional()
       .describe('Optional tag uuid to categorize this schedule.'),
-    repeating: repeatingSchema.optional().describe('Optional recurrence rule.'),
+    repeating: repeatingInputSchema.optional().describe('Optional recurrence rule.'),
     notification_options: z
       .array(z.unknown())
       .optional()
@@ -98,7 +96,9 @@ Unlike todos, schedules require an 'event_time'. The 'event_time' field is a tag
   execute: async (auth: Auth, args: unknown): Promise<CreateScheduleOutput> => {
     const body = createScheduleInput.parse(args)
     try {
-      return await callOpenApi<CreateScheduleOutput>(auth, 'POST', '/v2/open/schedules/', body)
+      return augmentIso(
+        await callOpenApi<CreateScheduleOutput>(auth, 'POST', '/v2/open/schedules/', body),
+      ) as CreateScheduleOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
@@ -109,14 +109,14 @@ const updateScheduleInput = z
   .object({
     schedule_id: z.string().min(1).describe('UUID of the schedule to update.'),
     name: z.string().optional().describe('New display name. Omit to keep unchanged.'),
-    event_time: eventTimeSchema
+    event_time: eventTimeInputSchema
       .optional()
       .describe('Replacement event_time. Omit to keep unchanged.'),
     event_tag_id: z
       .string()
       .optional()
       .describe('Tag uuid to reassign this schedule to. Omit to keep unchanged.'),
-    repeating: repeatingSchema
+    repeating: repeatingInputSchema
       .optional()
       .describe('Replacement recurrence rule. Omit to keep unchanged.'),
     notification_options: z
@@ -152,12 +152,14 @@ Only the fields you include in the body are applied — omitted fields stay as-i
   execute: async (auth: Auth, args: unknown): Promise<UpdateScheduleOutput> => {
     const { schedule_id, ...body } = updateScheduleInput.parse(args)
     try {
-      return await callOpenApi<UpdateScheduleOutput>(
-        auth,
-        'PATCH',
-        `/v2/open/schedules/${encodeURIComponent(schedule_id)}`,
-        body,
-      )
+      return augmentIso(
+        await callOpenApi<UpdateScheduleOutput>(
+          auth,
+          'PATCH',
+          `/v2/open/schedules/${encodeURIComponent(schedule_id)}`,
+          body,
+        ),
+      ) as UpdateScheduleOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
@@ -167,11 +169,9 @@ Only the fields you include in the body are applied — omitted fields stay as-i
 const excludeScheduleOccurrenceInput = z
   .object({
     schedule_id: z.string().min(1).describe('UUID of the repeating schedule.'),
-    exclude_repeatings: z
-      .number()
-      .describe(
-        `Timestamp (${TS_SEC}) of the single occurrence to exclude. Must be one of the origin's repeating occurrence start times.`,
-      ),
+    exclude_repeatings: isoToTsField.describe(
+      "ISO 8601 datetime of the single occurrence to exclude. Must be one of the origin's repeating occurrence start times.",
+    ),
   })
   .describe(
     'Body for excluding one occurrence of a repeating schedule. The origin schedule is updated in place — its `exclude_repeatings` array grows by one entry.',
@@ -206,12 +206,14 @@ All timestamps are Unix epoch seconds (UTC).`,
   ): Promise<ExcludeScheduleOccurrenceOutput> => {
     const { schedule_id, ...body } = excludeScheduleOccurrenceInput.parse(args)
     try {
-      return await callOpenApi<ExcludeScheduleOccurrenceOutput>(
-        auth,
-        'PATCH',
-        `/v2/open/schedules/${encodeURIComponent(schedule_id)}/exclude`,
-        body,
-      )
+      return augmentIso(
+        await callOpenApi<ExcludeScheduleOccurrenceOutput>(
+          auth,
+          'PATCH',
+          `/v2/open/schedules/${encodeURIComponent(schedule_id)}/exclude`,
+          body,
+        ),
+      ) as ExcludeScheduleOccurrenceOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
@@ -224,11 +226,9 @@ const replaceScheduleOccurrenceInput = z
     new: scheduleInputSchema.describe(
       'Replacement one-off schedule payload (creates a new schedule for the skipped slot). Same shape as create_schedule body.',
     ),
-    exclude_repeatings: z
-      .number()
-      .describe(
-        `Timestamp (${TS_SEC}) of the occurrence to exclude on the origin. The origin's repeating continues, this single slot is excluded.`,
-      ),
+    exclude_repeatings: isoToTsField.describe(
+      "ISO 8601 datetime of the occurrence to exclude on the origin. The origin's repeating continues, this single slot is excluded.",
+    ),
   })
   .describe(
     'Body for replacing a single occurrence: creates a new schedule AND excludes that occurrence from the origin in one transaction.',
@@ -270,12 +270,14 @@ The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'alld
   ): Promise<ReplaceScheduleOccurrenceOutput> => {
     const { schedule_id, ...body } = replaceScheduleOccurrenceInput.parse(args)
     try {
-      return await callOpenApi<ReplaceScheduleOccurrenceOutput>(
-        auth,
-        'POST',
-        `/v2/open/schedules/${encodeURIComponent(schedule_id)}/exclude`,
-        body,
-      )
+      return augmentIso(
+        await callOpenApi<ReplaceScheduleOccurrenceOutput>(
+          auth,
+          'POST',
+          `/v2/open/schedules/${encodeURIComponent(schedule_id)}/exclude`,
+          body,
+        ),
+      ) as ReplaceScheduleOccurrenceOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
@@ -288,11 +290,9 @@ const branchScheduleRepeatingInput = z
     new: scheduleInputSchema.describe(
       'New schedule that continues from the branch point. Typically a repeating schedule whose `repeating.start` equals the branch point.',
     ),
-    end_time: z
-      .number()
-      .describe(
-        `Timestamp (${TS_SEC}) at which the origin's recurrence ends and the new schedule takes over.`,
-      ),
+    end_time: isoToTsField.describe(
+      "ISO 8601 datetime at which the origin's recurrence ends and the new schedule takes over.",
+    ),
   })
   .describe(
     "Body for branching: caps the origin's recurrence at `end_time` and starts a new schedule for the remainder.",
@@ -335,12 +335,14 @@ All timestamps are Unix epoch seconds (UTC).`,
   ): Promise<BranchScheduleRepeatingOutput> => {
     const { schedule_id, ...body } = branchScheduleRepeatingInput.parse(args)
     try {
-      return await callOpenApi<BranchScheduleRepeatingOutput>(
-        auth,
-        'POST',
-        `/v2/open/schedules/${encodeURIComponent(schedule_id)}/branch_repeating`,
-        body,
-      )
+      return augmentIso(
+        await callOpenApi<BranchScheduleRepeatingOutput>(
+          auth,
+          'POST',
+          `/v2/open/schedules/${encodeURIComponent(schedule_id)}/branch_repeating`,
+          body,
+        ),
+      ) as BranchScheduleRepeatingOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
