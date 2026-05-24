@@ -63,45 +63,46 @@ describe('update_schedule — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ name: 'renamed' })
   })
 
-  it('event_time(allday) — discriminated union 통과', async () => {
+  it('event_time(allday) — ISO 입력 → ts + seconds_from_gmt 파생', async () => {
     await updateSchedule.execute(auth, {
       schedule_id: 's-1',
       event_time: {
         time_type: 'allday',
-        period_start: 1_700_000_000,
-        period_end: 1_700_086_400,
-        seconds_from_gmt: 32_400,
+        period_start: '2026-05-22T00:00:00+09:00',
+        period_end: '2026-05-22T00:00:00+09:00',
       },
     })
 
     expect(openApiSpy.lastBody).toEqual({
       event_time: {
         time_type: 'allday',
-        period_start: 1_700_000_000,
-        period_end: 1_700_086_400,
+        period_start: 1_779_375_600,
+        period_end: 1_779_375_600,
         seconds_from_gmt: 32_400,
       },
     })
   })
 
-  it('repeating + show_turns + notification_options + event_tag_id — 모두 body 포함', async () => {
-    const repeating = {
-      start: 1_700_000_000,
-      option: { optionType: 'every_week', interval: 1, dayOfWeek: [2], timeZone: 'Asia/Seoul' },
-    }
+  it('repeating + show_turns + notification_options + event_tag_id — ISO 입력 → ts body', async () => {
     const showTurns = { '1700003600': true }
     const notifs = [{ type: 'before', minutes: 10 }]
     await updateSchedule.execute(auth, {
       schedule_id: 's-1',
       event_tag_id: 'tag-1',
-      repeating,
+      repeating: {
+        start: '2023-11-14T22:13:20Z',
+        option: { optionType: 'every_week', interval: 1, dayOfWeek: [2], timeZone: 'Asia/Seoul' },
+      },
       notification_options: notifs,
       show_turns: showTurns,
     })
 
     expect(openApiSpy.lastBody).toEqual({
       event_tag_id: 'tag-1',
-      repeating,
+      repeating: {
+        start: 1_700_000_000,
+        option: { optionType: 'every_week', interval: 1, dayOfWeek: [2], timeZone: 'Asia/Seoul' },
+      },
       notification_options: notifs,
       show_turns: showTurns,
     })
@@ -113,18 +114,21 @@ describe('update_schedule — happy path', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/schedules/s%2Fwith%20space')
   })
 
-  it('raw 응답 그대로 반환 (passthrough)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (passthrough)', async () => {
     const raw = {
       uuid: 's-1',
       userId: 'u-1',
       name: 'renamed',
+      event_time: { time_type: 'at', timestamp: 1_700_000_000 },
       extra_unknown_field: 'kept',
     }
     openApiSpy.responsePayload = raw
 
     const result = await updateSchedule.execute(auth, { schedule_id: 's-1', name: 'renamed' })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
+    const et = (result as Record<string, unknown>).event_time as Record<string, unknown>
+    expect(et.timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 
@@ -173,7 +177,7 @@ describe('update_schedule — error wrap', () => {
     await expect(
       updateSchedule.execute(auth, {
         schedule_id: 's-1',
-        event_time: { time_type: 'at', timestamp: 1 },
+        event_time: { time_type: 'at', timestamp: '2023-11-14T22:13:20Z' },
       }),
     ).rejects.toThrow(/The request parameters are invalid\. \(event_time invalid\)/)
   })

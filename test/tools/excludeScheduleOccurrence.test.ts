@@ -54,10 +54,10 @@ beforeEach(() => {
 })
 
 describe('exclude_schedule_occurrence — happy path', () => {
-  it('PATCH /v2/open/schedules/{id}/exclude + body {exclude_repeatings}', async () => {
+  it('ISO 입력 → PATCH /v2/open/schedules/{id}/exclude + body ts {exclude_repeatings}', async () => {
     await excludeScheduleOccurrence.execute(auth, {
       schedule_id: 's-1',
-      exclude_repeatings: 1_700_003_600,
+      exclude_repeatings: '2023-11-14T23:13:20Z',
     })
 
     expect(openApiSpy.callCount).toBe(1)
@@ -70,13 +70,13 @@ describe('exclude_schedule_occurrence — happy path', () => {
   it('schedule_id URL 인코딩', async () => {
     await excludeScheduleOccurrence.execute(auth, {
       schedule_id: 's/with space',
-      exclude_repeatings: 1_700_003_600,
+      exclude_repeatings: '2023-11-14T23:13:20Z',
     })
 
     expect(openApiSpy.lastPath).toBe('/v2/open/schedules/s%2Fwith%20space/exclude')
   })
 
-  it('raw 응답 그대로 반환 (passthrough)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (passthrough)', async () => {
     const raw = {
       uuid: 's-1',
       userId: 'u-1',
@@ -88,10 +88,14 @@ describe('exclude_schedule_occurrence — happy path', () => {
 
     const result = await excludeScheduleOccurrence.execute(auth, {
       schedule_id: 's-1',
-      exclude_repeatings: 1_700_003_600,
+      exclude_repeatings: '2023-11-14T23:13:20Z',
     })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
+    expect((result as Record<string, unknown>).exclude_repeatings_iso).toEqual([
+      '2023-11-14T23:13:20.000Z',
+      '2023-11-15T23:13:20.000Z',
+    ])
   })
 })
 
@@ -100,7 +104,7 @@ describe('exclude_schedule_occurrence — input validation', () => {
     await expect(
       excludeScheduleOccurrence.execute(auth, {
         schedule_id: '',
-        exclude_repeatings: 1_700_003_600,
+        exclude_repeatings: '2023-11-14T23:13:20Z',
       }),
     ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
@@ -113,11 +117,11 @@ describe('exclude_schedule_occurrence — input validation', () => {
     expect(openApiSpy.callCount).toBe(0)
   })
 
-  it('exclude_repeatings 숫자가 아님 — zod throw', async () => {
+  it('exclude_repeatings 잘못된 ISO — zod throw', async () => {
     await expect(
       excludeScheduleOccurrence.execute(auth, {
         schedule_id: 's-1',
-        exclude_repeatings: 'now',
+        exclude_repeatings: 'not-a-date',
       }),
     ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
@@ -126,7 +130,7 @@ describe('exclude_schedule_occurrence — input validation', () => {
   it('userId 변조 시도 — body·auth에 흘러가지 않음', async () => {
     await excludeScheduleOccurrence.execute(auth, {
       schedule_id: 's-1',
-      exclude_repeatings: 1_700_003_600,
+      exclude_repeatings: '2023-11-14T23:13:20Z',
       userId: 'attacker',
     })
 
@@ -142,7 +146,7 @@ describe('exclude_schedule_occurrence — error wrap', () => {
     await expect(
       excludeScheduleOccurrence.execute(auth, {
         schedule_id: 'missing',
-        exclude_repeatings: 1_700_003_600,
+        exclude_repeatings: '2023-11-14T23:13:20Z',
       }),
     ).rejects.toThrow(/The requested resource does not exist\. \(schedule missing\)/)
   })
@@ -153,7 +157,7 @@ describe('exclude_schedule_occurrence — error wrap', () => {
     await expect(
       excludeScheduleOccurrence.execute(auth, {
         schedule_id: 's-1',
-        exclude_repeatings: 1_700_003_600,
+        exclude_repeatings: '2023-11-14T23:13:20Z',
       }),
     ).rejects.toThrow(/The request parameters are invalid\. \(not in repeating\)/)
   })
