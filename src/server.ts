@@ -9,6 +9,11 @@ import {
   extractOAuthAuth,
 } from './middleware/auth.js'
 import { createMcpServer } from './mcp/server.js'
+import {
+  PROTECTED_RESOURCE_METADATA_PATH,
+  buildWwwAuthenticate,
+  metadataUrlFrom,
+} from './middleware/wwwAuthenticate.js'
 import { tools } from './tools/index.js'
 import { FAVICON_PNG_BYTES } from './assets/favicon.js'
 
@@ -16,7 +21,6 @@ type AuthedRequest = IncomingMessage & { auth?: AuthInfo }
 
 export type AuthMode = 'oauth' | 'dev'
 
-const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource'
 const MAX_BODY_BYTES = 1024 * 1024 // 1 MB — JSON-RPC body sanity cap
 
 class BodyTooLargeError extends Error {
@@ -97,46 +101,6 @@ export interface HttpServerOptions {
 // dev mode은 sync extractDevAuth를 promise로 감싸 동일 인터페이스로 통일.
 const selectExtractor = (mode: AuthMode): AuthExtractor =>
   mode === 'dev' ? async (headers) => extractDevAuth(headers) : extractOAuthAuth
-
-// RFC 7235 quoted-string — `"`와 `\` 모두 escape 필수. 정보 손실 없이 안전화.
-const escapeQuotedString = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-
-interface Challenge {
-  error: string
-  description?: string
-  scope?: string
-}
-
-const buildWwwAuthenticate = (
-  canonicalUri: string | undefined,
-  metadataUrl: string | undefined,
-  challenge?: Challenge,
-): string => {
-  const parts: string[] = []
-  if (canonicalUri !== undefined) parts.push(`realm="${escapeQuotedString(canonicalUri)}"`)
-  if (metadataUrl !== undefined)
-    parts.push(`resource_metadata="${escapeQuotedString(metadataUrl)}"`)
-  if (challenge !== undefined) {
-    parts.push(`error="${escapeQuotedString(challenge.error)}"`)
-    if (challenge.description !== undefined) {
-      parts.push(`error_description="${escapeQuotedString(challenge.description)}"`)
-    }
-    if (challenge.scope !== undefined) {
-      parts.push(`scope="${escapeQuotedString(challenge.scope)}"`)
-    }
-  }
-  return parts.length > 0 ? `Bearer ${parts.join(', ')}` : 'Bearer'
-}
-
-const metadataUrlFrom = (canonicalUri: string | undefined): string | undefined => {
-  if (canonicalUri === undefined) return undefined
-  try {
-    const url = new URL(canonicalUri)
-    return `${url.protocol}//${url.host}${PROTECTED_RESOURCE_METADATA_PATH}`
-  } catch {
-    return undefined
-  }
-}
 
 // JSON-RPC body 사전 파싱 — transport에 parsedBody로 전달 + scope enforce 사전 검증용.
 // MAX_BODY_BYTES 초과는 `BodyTooLargeError`로 별도 분류 (413 응답 매핑 위해).
