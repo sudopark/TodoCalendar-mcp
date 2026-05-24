@@ -1,31 +1,19 @@
-import http, { type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http'
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import { OAuthTokenError } from './auth/oauthVerify.js'
+import http, { type Server as HttpServer } from 'node:http'
+import express, { type ErrorRequestHandler, type RequestHandler } from 'express'
+import cors from 'cors'
 import {
   type AuthExtractor,
-  AuthRequiredError,
   extractDevAuth,
   extractOAuthAuth,
+  mcpAuth,
 } from './middleware/auth.js'
-import { createMcpServer } from './mcp/server.js'
-import {
-  PROTECTED_RESOURCE_METADATA_PATH,
-  buildWwwAuthenticate,
-  metadataUrlFrom,
-} from './middleware/wwwAuthenticate.js'
+import { scopeEnforce } from './middleware/scope.js'
+import { PROTECTED_RESOURCE_METADATA_PATH } from './middleware/wwwAuthenticate.js'
+import { mcpRequestHandler } from './mcp/handler.js'
 import { tools } from './tools/index.js'
 import { FAVICON_PNG_BYTES } from './assets/favicon.js'
 
-type AuthedRequest = IncomingMessage & { auth?: AuthInfo }
-
 export type AuthMode = 'oauth' | 'dev'
-
-const MAX_BODY_BYTES = 1024 * 1024 // 1 MB — JSON-RPC body sanity cap
-
-class BodyTooLargeError extends Error {
-  override readonly name = 'BodyTooLargeError'
-}
 
 // distinct scope set across the registry — RFC 9728 `scopes_supported`.
 // Derived once at module load (tools is frozen).
@@ -33,51 +21,12 @@ const SUPPORTED_SCOPES: readonly string[] = [
   ...new Set(Object.values(tools).flatMap((t) => t.scopes)),
 ].sort()
 
-const writeJson = (res: ServerResponse, status: number, body: unknown): void => {
-  res.statusCode = status
-  res.setHeader('content-type', 'application/json')
-  res.end(JSON.stringify(body))
-}
-
-const writeFavicon = (res: ServerResponse): void => {
-  res.statusCode = 200
-  res.setHeader('content-type', 'image/png')
-  res.setHeader('cache-control', 'public, max-age=86400')
-  res.end(FAVICON_PNG_BYTES)
-}
-
-// 브라우저 기반 client(MCP Inspector 등)가 RS metadata·token endpoint를 fetch할 수 있도록
-// 모든 응답에 CORS 헤더를 박는다. RS는 Bearer 인증이라 credentials cookie 없음 → `*` 안전.
-// Expose-Headers는 WWW-Authenticate(OAuth challenge 노출) + Mcp-Session-Id(transport spec).
-const setCorsHeaders = (res: ServerResponse): void => {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Authorization, Content-Type, Mcp-Session-Id, MCP-Protocol-Version, X-Dev-User-Id',
-  )
-  res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate, Mcp-Session-Id')
-  res.setHeader('Access-Control-Max-Age', '86400')
-}
-
-const writeMethodNotAllowed = (res: ServerResponse, allow: string): void => {
-  res.statusCode = 405
-  res.setHeader('content-type', 'application/json')
-  res.setHeader('allow', allow)
-  res.end(
-    JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null }),
-  )
-}
-
-const parsePathname = (req: IncomingMessage): string => {
-  const raw = req.url ?? '/'
-  const idx = raw.indexOf('?')
-  return idx >= 0 ? raw.slice(0, idx) : raw
-}
-
 export const parseAllowedHosts = (raw: string | undefined): string[] | undefined => {
   if (raw === undefined || raw.trim() === '') return undefined
-  const list = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+  const list = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
   return list.length > 0 ? list : undefined
 }
 
@@ -102,230 +51,124 @@ export interface HttpServerOptions {
 const selectExtractor = (mode: AuthMode): AuthExtractor =>
   mode === 'dev' ? async (headers) => extractDevAuth(headers) : extractOAuthAuth
 
-// JSON-RPC body 사전 파싱 — transport에 parsedBody로 전달 + scope enforce 사전 검증용.
-// MAX_BODY_BYTES 초과는 `BodyTooLargeError`로 별도 분류 (413 응답 매핑 위해).
-// settled flag로 first-settle wins 명시 — destroy 후 추가 이벤트 dead-loop 차단.
-const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    let total = 0
-    let settled = false
-    req.on('data', (chunk: Buffer | string) => {
-      if (settled) return
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      total += buf.length
-      if (total > MAX_BODY_BYTES) {
-        settled = true
-        reject(new BodyTooLargeError('request body too large'))
-        // req.destroy()는 안 함 — client가 보내고 있는 동안 socket을 끊으면
-        // client side에서 응답 헤더를 받기 전에 socket close라 'fetch failed' 처리됨.
-        // 응답이 client에 도달할 수 있게 stream은 자연 종료까지 두고 body만 chunks에 넣지 않음.
-        return
-      }
-      chunks.push(buf)
-    })
-    req.on('end', () => {
-      if (settled) return
-      settled = true
-      const text = Buffer.concat(chunks).toString('utf-8')
-      if (text === '') {
-        resolve(null)
-        return
-      }
-      try {
-        resolve(JSON.parse(text))
-      } catch (e) {
-        reject(e)
-      }
-    })
-    req.on('error', (e) => {
-      if (settled) return
-      settled = true
-      reject(e)
-    })
-  })
-}
-
-// JSON-RPC body에서 tools/call 인 호출들의 필요 scope 집합을 모음.
-// batch도 처리 (array body). 그 외 method(initialize, tools/list 등)는 scope 무관.
-const requiredScopesFor = (body: unknown): readonly string[] => {
-  if (body === null || typeof body !== 'object') return []
-  const items = Array.isArray(body) ? body : [body]
-  const acc = new Set<string>()
-  for (const item of items) {
-    if (item === null || typeof item !== 'object') continue
-    const rec = item as { method?: unknown; params?: unknown }
-    if (rec.method !== 'tools/call') continue
-    const params = rec.params as { name?: unknown } | undefined
-    const name = params?.name
-    if (typeof name !== 'string') continue
-    const tool = tools[name]
-    if (tool === undefined) continue
-    for (const s of tool.scopes) acc.add(s)
-  }
-  return [...acc]
-}
-
-// Stateless: spec/SDK가 권장하는 production 패턴 (SEP-1442 방향).
-// 매 POST 요청에 fresh Server+Transport를 만들고 res close 시 정리.
-// 세션 메모리 0, scale-out·serverless 친화적, session affinity 불필요.
-const handleMcpPost = async (
-  req: AuthedRequest,
-  res: ServerResponse,
-  options: HttpServerOptions,
-  extractAuth: AuthExtractor,
-): Promise<void> => {
-  const metadataUrl = metadataUrlFrom(options.canonicalUri)
-
-  let auth: Awaited<ReturnType<AuthExtractor>>
-  try {
-    auth = await extractAuth(req.headers)
-  } catch (e) {
-    if (e instanceof OAuthTokenError) {
-      res.setHeader(
-        'WWW-Authenticate',
-        buildWwwAuthenticate(options.canonicalUri, metadataUrl, {
-          error: 'invalid_token',
-        }),
-      )
-      writeJson(res, 401, { error: 'unauthorized' })
+const protectedResourceMetadata =
+  (options: HttpServerOptions): RequestHandler =>
+  (_req, res) => {
+    if (options.canonicalUri === undefined || options.issuer === undefined) {
+      // config-incomplete — endpoint 자체는 존재하므로 NotFound가 아닌 ServiceUnavailable로.
+      res
+        .status(503)
+        .json({ error: 'service_unavailable', message: 'auth metadata not configured' })
       return
     }
-    if (e instanceof AuthRequiredError) {
-      // token 누락은 RFC 6750 §3 권고 — error code 없이 challenge만.
-      res.setHeader(
-        'WWW-Authenticate',
-        buildWwwAuthenticate(options.canonicalUri, metadataUrl),
-      )
-      writeJson(res, 401, { error: 'unauthorized' })
-      return
-    }
-    throw e
+    res.json({
+      resource: options.canonicalUri,
+      authorization_servers: [options.issuer],
+      bearer_methods_supported: ['header'],
+      scopes_supported: [...SUPPORTED_SCOPES],
+    })
   }
 
-  let parsedBody: unknown
-  try {
-    parsedBody = await readJsonBody(req)
-  } catch (e) {
-    // JSON-RPC 2.0 envelope으로 응답 — SDK가 직접 파싱했을 때와 contract 통일.
-    if (e instanceof BodyTooLargeError) {
-      writeJson(res, 413, {
-        jsonrpc: '2.0',
-        error: { code: -32600, message: 'request body too large' },
-        id: null,
-      })
-      return
-    }
-    writeJson(res, 400, {
+const methodNotAllowed: RequestHandler = (_req, res) => {
+  res
+    .status(405)
+    .set('Allow', 'POST')
+    .json({
+      jsonrpc: '2.0',
+      error: { code: -32000, message: 'Method not allowed' },
+      id: null,
+    })
+}
+
+// express.json / 기타 미들웨어가 throw한 에러를 JSON-RPC envelope으로 매핑.
+// SDK가 직접 파싱했을 때와 contract 통일.
+const jsonRpcErrorHandler: ErrorRequestHandler = (err, _req, res, next) => {
+  if (res.headersSent) {
+    next(err)
+    return
+  }
+  const e = err as { type?: string; status?: number; statusCode?: number }
+  const status = e.status ?? e.statusCode
+  if (e.type === 'entity.too.large' || status === 413) {
+    res.status(413).json({
+      jsonrpc: '2.0',
+      error: { code: -32600, message: 'request body too large' },
+      id: null,
+    })
+    return
+  }
+  if (e.type === 'entity.parse.failed' || status === 400) {
+    res.status(400).json({
       jsonrpc: '2.0',
       error: { code: -32700, message: 'Parse error: invalid JSON' },
       id: null,
     })
     return
   }
-
-  // RFC 6750 §3.1 scope enforce — transport 단계에서 403 + WWW-Authenticate.
-  // LLM client가 표준 흐름으로 scope 재인가 진행 가능.
-  const required = requiredScopesFor(parsedBody)
-  const missing = required.filter((s) => !auth.scopes.includes(s))
-  if (missing.length > 0) {
-    const scopeStr = missing.join(' ')
-    res.setHeader(
-      'WWW-Authenticate',
-      buildWwwAuthenticate(options.canonicalUri, metadataUrl, {
-        error: 'insufficient_scope',
-        description: 'token lacks required scope',
-        scope: scopeStr,
-      }),
-    )
-    writeJson(res, 403, { error: 'insufficient_scope' })
-    return
-  }
-
-  req.auth = {
-    token: 'verified', // placeholder — 실제 access token은 SDK 콘텍스트로 propagate 안 함 (CLAUDE.md §3)
-    clientId: auth.clientId ?? 'mcp',
-    scopes: [...auth.scopes],
-    extra: { userId: auth.userId },
-  }
-
-  const mcpServer = createMcpServer()
-  // DNS rebinding 보호: SDK 기본은 모두 비활성. allowedHosts 주입 시 protection 활성.
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableDnsRebindingProtection: options.allowedHosts !== undefined,
-    allowedHosts: options.allowedHosts,
-  })
-  // res.on('close')는 정상 종료·클라이언트 disconnect 둘 다 발화. 어느 쪽이든 동일 cleanup.
-  // close()는 throw할 일이 거의 없지만 unhandled rejection 방지 차원에서 swallow.
-  res.on('close', () => {
-    transport.close().catch(() => {})
-    mcpServer.close().catch(() => {})
-  })
-  await mcpServer.connect(transport)
-  await transport.handleRequest(req, res, parsedBody)
-}
-
-const writeProtectedResourceMetadata = (
-  res: ServerResponse,
-  options: HttpServerOptions,
-): void => {
-  if (options.canonicalUri === undefined || options.issuer === undefined) {
-    // config-incomplete — endpoint 자체는 존재하므로 NotFound가 아닌 ServiceUnavailable로.
-    writeJson(res, 503, { error: 'service_unavailable', message: 'auth metadata not configured' })
-    return
-  }
-  writeJson(res, 200, {
-    resource: options.canonicalUri,
-    authorization_servers: [options.issuer],
-    bearer_methods_supported: ['header'],
-    scopes_supported: [...SUPPORTED_SCOPES],
-  })
+  const message = err instanceof Error ? err.message : String(err)
+  res.status(500).json({ error: 'internal_error', message })
 }
 
 export const createHttpServer = (options: HttpServerOptions = {}): HttpServer => {
   const mode = options.authMode ?? 'oauth'
-  const extractAuth = selectExtractor(mode)
-  return http.createServer((req, res) => {
-    setCorsHeaders(res)
-    if (req.method === 'OPTIONS') {
-      res.statusCode = 204
-      res.end()
-      return
-    }
-    const pathname = parsePathname(req)
+  const extractor = selectExtractor(mode)
 
-    if (req.method === 'GET' && pathname === '/health') {
-      writeJson(res, 200, { status: 'ok' })
-      return
-    }
-    if (
-      req.method === 'GET' &&
-      (pathname === '/favicon.ico' || pathname === '/favicon.png')
-    ) {
-      writeFavicon(res)
-      return
-    }
-    if (req.method === 'GET' && pathname === PROTECTED_RESOURCE_METADATA_PATH) {
-      writeProtectedResourceMetadata(res, options)
-      return
-    }
-    if (pathname === '/mcp' || pathname === '/mcp/') {
-      // Stateless 모드: GET(SSE)·DELETE(세션 종료)는 의미 없음. POST만 허용.
-      if (req.method !== 'POST') {
-        writeMethodNotAllowed(res, 'POST')
-        return
-      }
-      void handleMcpPost(req as AuthedRequest, res, options, extractAuth).catch((e: unknown) => {
-        if (!res.headersSent) {
-          const message = e instanceof Error ? e.message : String(e)
-          writeJson(res, 500, { error: 'internal_error', message })
-        }
-      })
-      return
-    }
-    writeJson(res, 404, { error: 'not_found' })
+  const app = express()
+
+  // 브라우저 기반 client(MCP Inspector 등)가 RS metadata·token endpoint를 fetch할 수 있도록
+  // 모든 응답에 CORS 헤더. RS는 Bearer 인증이라 cookie credentials 없음 → `*` 안전.
+  // Expose-Headers: WWW-Authenticate(OAuth challenge) + Mcp-Session-Id(transport spec).
+  app.use(
+    cors({
+      origin: '*',
+      methods: ['GET', 'POST', 'OPTIONS'],
+      allowedHeaders: [
+        'Authorization',
+        'Content-Type',
+        'Mcp-Session-Id',
+        'MCP-Protocol-Version',
+        'X-Dev-User-Id',
+      ],
+      exposedHeaders: ['WWW-Authenticate', 'Mcp-Session-Id'],
+      maxAge: 86400,
+    }),
+  )
+
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok' })
   })
+
+  const sendFavicon: RequestHandler = (_req, res) => {
+    res
+      .status(200)
+      .set('content-type', 'image/png')
+      .set('cache-control', 'public, max-age=86400')
+      .end(FAVICON_PNG_BYTES)
+  }
+  app.get('/favicon.ico', sendFavicon)
+  app.get('/favicon.png', sendFavicon)
+
+  app.get(PROTECTED_RESOURCE_METADATA_PATH, protectedResourceMetadata(options))
+
+  // POST /mcp 파이프라인 — body parse → auth → scope → MCP handler.
+  // 각 미들웨어는 단일 책임이며 실패 시 res 응답으로 종료, 성공 시 next().
+  app.post(
+    '/mcp',
+    express.json({ limit: '1mb' }),
+    mcpAuth({ extractor, canonicalUri: options.canonicalUri }),
+    scopeEnforce({ canonicalUri: options.canonicalUri }),
+    mcpRequestHandler({ allowedHosts: options.allowedHosts }),
+  )
+  // Stateless 모드: GET(SSE)·DELETE(세션 종료)는 의미 없음. POST만 허용.
+  app.all('/mcp', methodNotAllowed)
+
+  app.use((_req, res) => {
+    res.status(404).json({ error: 'not_found' })
+  })
+
+  app.use(jsonRpcErrorHandler)
+
+  return http.createServer(app)
 }
 
 const start = async (): Promise<void> => {
