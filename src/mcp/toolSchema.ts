@@ -43,8 +43,11 @@ const assertNoRootUnion = (json: Record<string, unknown>, role: 'input' | 'outpu
   )
 }
 
-const toMcpInputSchema = (zod: z.ZodType): InputSchema => {
-  const json = stripMeta(z.toJSONSchema(zod) as Record<string, unknown>)
+export const toMcpInputSchema = (zod: z.ZodType): InputSchema => {
+  // io: 'input' — transform schemas expose pre-transform (input) side for JSON Schema.
+  // Required because input schemas may contain ISO→ts transforms; outputSchema still
+  // uses default (output side) which is fine since output schemas are plain zod.
+  const json = stripMeta(z.toJSONSchema(zod, { io: 'input' }) as Record<string, unknown>)
   assertNoRootUnion(json, 'input')
   return json as InputSchema
 }

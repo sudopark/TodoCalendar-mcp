@@ -60,21 +60,29 @@ describe('get_todos — mode 분기', () => {
   })
 
   it('range — lower/upper 쿼리스트링', async () => {
-    await getTodos.execute(auth, { mode: 'range', lower: 1_700_000_000, upper: 1_700_086_400 })
+    await getTodos.execute(auth, {
+      mode: 'range',
+      lower: '2023-11-14T22:13:20Z',
+      upper: '2023-11-15T22:13:20Z',
+    })
 
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/?lower=1700000000&upper=1700086400')
   })
 
   it('uncompleted — refTime 쿼리스트링, /uncompleted 경로', async () => {
-    await getTodos.execute(auth, { mode: 'uncompleted', refTime: 1_700_000_000 })
+    await getTodos.execute(auth, { mode: 'uncompleted', refTime: '2023-11-14T22:13:20Z' })
 
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/uncompleted?refTime=1700000000')
   })
 
   it('range — lower/upper 동일 값 허용 (서버에 위임)', async () => {
-    await getTodos.execute(auth, { mode: 'range', lower: 100, upper: 100 })
+    await getTodos.execute(auth, {
+      mode: 'range',
+      lower: '2023-11-14T22:13:20Z',
+      upper: '2023-11-14T22:13:20Z',
+    })
 
-    expect(openApiSpy.lastPath).toBe('/v2/open/todos/?lower=100&upper=100')
+    expect(openApiSpy.lastPath).toBe('/v2/open/todos/?lower=1700000000&upper=1700000000')
   })
 })
 
@@ -85,7 +93,9 @@ describe('get_todos — input validation', () => {
   })
 
   it('range mode인데 upper 누락 — zod throw', async () => {
-    await expect(getTodos.execute(auth, { mode: 'range', lower: 1 })).rejects.toThrow()
+    await expect(
+      getTodos.execute(auth, { mode: 'range', lower: '2023-11-14T22:13:20Z' }),
+    ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
   })
 
@@ -108,7 +118,7 @@ describe('get_todos — input validation', () => {
 })
 
 describe('get_todos — 응답 raw 통과', () => {
-  it('userId·timestamp 등 변환 없이 그대로 반환', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가', async () => {
     const raw = [
       {
         uuid: 't-1',
@@ -127,9 +137,18 @@ describe('get_todos — 응답 raw 통과', () => {
 
     const result = await getTodos.execute(auth, { mode: 'current' })
 
-    expect(result).toEqual(raw)
-    expect(result[0]).toHaveProperty('userId', 'u-1')
-    expect(result[0]?.create_timestamp).toBe(1_700_000_000)
+    const r0 = result[0] as Record<string, unknown>
+    // raw ts 보존
+    expect(r0).toHaveProperty('userId', 'u-1')
+    expect(r0?.create_timestamp).toBe(1_700_000_000)
+    // *_iso 형제 필드 추가
+    expect(r0?.create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
+    const et = r0?.event_time as Record<string, unknown>
+    expect(et?.timestamp).toBe(1_700_003_600)
+    expect(et?.timestamp_iso).toBe('2023-11-14T23:13:20.000Z')
+    const rep = r0?.repeating as Record<string, unknown>
+    expect(rep?.start).toBe(1_700_000_000)
+    expect(rep?.start_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 
@@ -137,16 +156,20 @@ describe('get_todos — error 자연어 wrap', () => {
   it('OpenApiError → ToolError, 영어 prefix 보강', async () => {
     openApiSpy.responseError = new InvalidParameterError('lower required')
 
-    await expect(getTodos.execute(auth, { mode: 'range', lower: 1, upper: 2 })).rejects.toThrow(
-      /The request parameters are invalid\. \(lower required\)/,
-    )
+    await expect(
+      getTodos.execute(auth, {
+        mode: 'range',
+        lower: '2023-11-14T22:13:20Z',
+        upper: '2023-11-14T23:13:20Z',
+      }),
+    ).rejects.toThrow(/The request parameters are invalid\. \(lower required\)/)
   })
 })
 
 describe('get_todos — metadata', () => {
   it('name·description·schemas 노출', () => {
     expect(getTodos.name).toBe('get_todos')
-    expect(getTodos.description).toMatch(/Unix epoch seconds/)
+    expect(getTodos.description).toMatch(/ISO 8601/)
     expect(getTodos.inputSchema).toBeDefined()
     expect(getTodos.outputSchema).toBeDefined()
   })

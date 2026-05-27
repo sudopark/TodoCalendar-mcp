@@ -49,31 +49,42 @@ beforeEach(() => {
 })
 
 describe('get_schedules', () => {
-  it('lower/upper 쿼리스트링으로 호출', async () => {
-    await getSchedules.execute(auth, { lower: 1_700_000_000, upper: 1_700_086_400 })
+  it('lower/upper ISO → 쿼리스트링 ts로 호출', async () => {
+    await getSchedules.execute(auth, {
+      lower: '2023-11-14T22:13:20Z',
+      upper: '2023-11-15T22:13:20Z',
+    })
 
     expect(openApiSpy.lastMethod).toBe('GET')
     expect(openApiSpy.lastPath).toBe('/v2/open/schedules/?lower=1700000000&upper=1700086400')
   })
 
   it('lower 누락 — zod throw', async () => {
-    await expect(getSchedules.execute(auth, { upper: 1 })).rejects.toThrow()
+    await expect(
+      getSchedules.execute(auth, { upper: '2023-11-14T22:13:20Z' }),
+    ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
   })
 
   it('upper 누락 — zod throw', async () => {
-    await expect(getSchedules.execute(auth, { lower: 1 })).rejects.toThrow()
+    await expect(
+      getSchedules.execute(auth, { lower: '2023-11-14T22:13:20Z' }),
+    ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
   })
 
   it('Tool 인자에 userId 변조 시도 — 무시', async () => {
-    await getSchedules.execute(auth, { lower: 1, upper: 2, userId: 'attacker' })
+    await getSchedules.execute(auth, {
+      lower: '2023-11-14T22:13:20Z',
+      upper: '2023-11-14T23:13:20Z',
+      userId: 'attacker',
+    })
 
     expect(openApiSpy.lastAuth).toBe(auth)
-    expect(openApiSpy.lastPath).toBe('/v2/open/schedules/?lower=1&upper=2')
+    expect(openApiSpy.lastPath).toBe('/v2/open/schedules/?lower=1700000000&upper=1700003600')
   })
 
-  it('raw 응답 통과 — userId·exclude_repeatings 보존', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (userId·exclude_repeatings 보존)', async () => {
     const raw = [
       {
         uuid: 's-1',
@@ -89,21 +100,32 @@ describe('get_schedules', () => {
     ]
     openApiSpy.responsePayload = raw
 
-    const result = await getSchedules.execute(auth, { lower: 0, upper: 9_999_999_999 })
+    const result = await getSchedules.execute(auth, {
+      lower: '2023-11-14T00:00:00Z',
+      upper: '2023-11-24T00:00:00Z',
+    })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
+    const r0 = (result as Record<string, unknown>[])[0] as Record<string, unknown>
+    const et = r0.event_time as Record<string, unknown>
+    expect(et.period_start_iso).toBe('2023-11-14T22:13:20.000Z')
+    expect(et.period_end_iso).toBe('2023-11-14T23:13:20.000Z')
+    expect(r0.exclude_repeatings_iso).toEqual(['2023-11-21T22:13:20.000Z'])
   })
 
   it('OpenApiError → ToolError', async () => {
     openApiSpy.responseError = new InvalidParameterError('range invalid')
 
-    await expect(getSchedules.execute(auth, { lower: 2, upper: 1 })).rejects.toThrow(
-      /The request parameters are invalid\. \(range invalid\)/,
-    )
+    await expect(
+      getSchedules.execute(auth, {
+        lower: '2023-11-14T23:13:20Z',
+        upper: '2023-11-14T22:13:20Z',
+      }),
+    ).rejects.toThrow(/The request parameters are invalid\. \(range invalid\)/)
   })
 
   it('metadata', () => {
     expect(getSchedules.name).toBe('get_schedules')
-    expect(getSchedules.description).toMatch(/Unix epoch seconds/)
+    expect(getSchedules.description).toMatch(/ISO 8601/)
   })
 })

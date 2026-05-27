@@ -5,10 +5,11 @@ import { wrapOpenApiError } from './shared/errors.js'
 import {
   doneTodoSchema,
   eventDetailSchema,
-  eventTimeSchema,
+  eventTimeInputSchema,
   statusOkSchema,
   todoSchema,
 } from './shared/schemas.js'
+import { augmentIso } from './shared/time.js'
 import type { ToolDefinition } from './shared/tool.js'
 
 const DEFAULT_SIZE = 50
@@ -25,6 +26,7 @@ const getDoneTodosInput = z
       .describe(
         `Page size (1..${MAX_SIZE}, default ${DEFAULT_SIZE}). The server returns up to this many done-todos.`,
       ),
+    // cursor는 이전 응답의 done_at(ts)을 그대로 echo하는 페이지네이션 토큰 — ISO 변환 대상 아님.
     cursor: z
       .number()
       .nullish()
@@ -50,7 +52,7 @@ export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput>
   description: `\
 List / fetch / show / get completed (done / finished / closed / past) todos for the authenticated user — history of what's been checked off, ordered by completion time (newest first), paginated by cursor.
 
-Response is an array of done todos. For pagination, pass the last item's 'done_at' as 'cursor' on the next call (cursor is excluded — items strictly older than cursor are returned). When the returned array length is less than 'size', there are no more pages. All timestamps in the response are Unix epoch seconds (UTC).`,
+Response is an array of done todos. For pagination, pass the last item's 'done_at' as 'cursor' on the next call (cursor is excluded — items strictly older than cursor are returned). When the returned array length is less than 'size', there are no more pages. All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The \`cursor\` pagination field is the raw ts value (Unix seconds) echoed from a previous response's \`done_at\`, not an ISO string.`,
   inputSchema: getDoneTodosInput,
   outputSchema: getDoneTodosOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetDoneTodosOutput> => {
@@ -58,11 +60,9 @@ Response is an array of done todos. For pagination, pass the last item's 'done_a
     const qs = new URLSearchParams({ size: String(size) })
     if (cursor !== undefined && cursor !== null) qs.set('cursor', String(cursor))
     try {
-      return await callOpenApi<GetDoneTodosOutput>(
-        auth,
-        'GET',
-        `/v2/open/todos/dones/?${qs.toString()}`,
-      )
+      return augmentIso(
+        await callOpenApi<GetDoneTodosOutput>(auth, 'GET', `/v2/open/todos/dones/?${qs.toString()}`),
+      ) as GetDoneTodosOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
@@ -73,7 +73,7 @@ const updateDoneTodoInput = z
   .object({
     done_todo_id: z.string().min(1).describe('UUID of the done-todo to update.'),
     name: z.string().optional().describe('New display name. Omit to keep unchanged.'),
-    event_time: eventTimeSchema
+    event_time: eventTimeInputSchema
       .optional()
       .describe('Replacement event_time. Omit to keep unchanged.'),
     event_tag_id: z
@@ -97,18 +97,20 @@ export const updateDoneTodo: ToolDefinition<UpdateDoneTodoInput, UpdateDoneTodoO
   description: `\
 Update editable fields of a completed (done) todo: name, event_time, event_tag_id. Returns the updated done todo.
 
-The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All timestamps are Unix epoch seconds (UTC). To bring a done todo back to the active list, use revert_done_todo instead.`,
+The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. To bring a done todo back to the active list, use revert_done_todo instead.`,
   inputSchema: updateDoneTodoInput,
   outputSchema: updateDoneTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateDoneTodoOutput> => {
     const { done_todo_id, ...body } = updateDoneTodoInput.parse(args)
     try {
-      return await callOpenApi<UpdateDoneTodoOutput>(
-        auth,
-        'PUT',
-        `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}`,
-        body,
-      )
+      return augmentIso(
+        await callOpenApi<UpdateDoneTodoOutput>(
+          auth,
+          'PUT',
+          `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}`,
+          body,
+        ),
+      ) as UpdateDoneTodoOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
@@ -153,11 +155,13 @@ This deletes the done-todo record and creates a fresh active todo with the prese
   execute: async (auth: Auth, args: unknown): Promise<RevertDoneTodoOutput> => {
     const { done_todo_id } = revertDoneTodoInput.parse(args)
     try {
-      return await callOpenApi<RevertDoneTodoOutput>(
-        auth,
-        'POST',
-        `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}/revert`,
-      )
+      return augmentIso(
+        await callOpenApi<RevertDoneTodoOutput>(
+          auth,
+          'POST',
+          `/v2/open/todos/dones/${encodeURIComponent(done_todo_id)}/revert`,
+        ),
+      ) as RevertDoneTodoOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }

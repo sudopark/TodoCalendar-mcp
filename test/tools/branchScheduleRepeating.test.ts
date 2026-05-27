@@ -38,11 +38,19 @@ const { branchScheduleRepeating } = await import('../../src/tools/scheduleTools.
 
 const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
-const newSchedule = {
+const newScheduleIso = {
   name: 'branched',
-  event_time: { time_type: 'at' as const, timestamp: 1_700_010_000 },
+  event_time: { time_type: 'at' as const, timestamp: '2023-11-14T22:13:20Z' },
   repeating: {
-    start: 1_700_010_000,
+    start: '2023-11-14T22:13:20Z',
+    option: { optionType: 'every_day', interval: 1 },
+  },
+}
+const newScheduleTs = {
+  name: 'branched',
+  event_time: { time_type: 'at' as const, timestamp: 1_700_000_000 },
+  repeating: {
+    start: 1_700_000_000,
     option: { optionType: 'every_day', interval: 1 },
   },
 }
@@ -69,11 +77,11 @@ beforeEach(() => {
 })
 
 describe('branch_schedule_repeating — happy path', () => {
-  it('POST /v2/open/schedules/{id}/branch_repeating + body {new, end_time}', async () => {
+  it('ISO 입력 → POST /v2/open/schedules/{id}/branch_repeating + body ts {new, end_time}', async () => {
     await branchScheduleRepeating.execute(auth, {
       schedule_id: 's-origin',
-      new: newSchedule,
-      end_time: 1_700_003_600,
+      new: newScheduleIso,
+      end_time: '2023-11-14T23:13:20Z',
     })
 
     expect(openApiSpy.callCount).toBe(1)
@@ -81,7 +89,7 @@ describe('branch_schedule_repeating — happy path', () => {
     expect(openApiSpy.lastMethod).toBe('POST')
     expect(openApiSpy.lastPath).toBe('/v2/open/schedules/s-origin/branch_repeating')
     expect(openApiSpy.lastBody).toEqual({
-      new: newSchedule,
+      new: newScheduleTs,
       end_time: 1_700_003_600,
     })
   })
@@ -89,25 +97,27 @@ describe('branch_schedule_repeating — happy path', () => {
   it('schedule_id URL 인코딩', async () => {
     await branchScheduleRepeating.execute(auth, {
       schedule_id: 's/with space',
-      new: newSchedule,
-      end_time: 1_700_003_600,
+      new: newScheduleIso,
+      end_time: '2023-11-14T23:13:20Z',
     })
 
     expect(openApiSpy.lastPath).toBe('/v2/open/schedules/s%2Fwith%20space/branch_repeating')
   })
 
-  it('raw 응답 그대로 반환 (passthrough)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (passthrough)', async () => {
     const raw = {
       origin: {
         uuid: 's-origin',
         userId: 'u-1',
         name: 'recurring',
+        event_time: { time_type: 'at', timestamp: 1_700_000_000 },
         extra_unknown_field: 'kept',
       },
       new: {
         uuid: 's-branch',
         userId: 'u-1',
         name: 'branched',
+        repeating: { start: 1_700_000_000, option: { optionType: 'every_day', interval: 1 } },
       },
       extra_top_level: 'kept',
     }
@@ -115,11 +125,18 @@ describe('branch_schedule_repeating — happy path', () => {
 
     const result = await branchScheduleRepeating.execute(auth, {
       schedule_id: 's-origin',
-      new: newSchedule,
-      end_time: 1_700_003_600,
+      new: newScheduleIso,
+      end_time: '2023-11-14T23:13:20Z',
     })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
+    const r = result as Record<string, unknown>
+    const origin = r.origin as Record<string, unknown>
+    const et = origin.event_time as Record<string, unknown>
+    expect(et.timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
+    const newBranch = r.new as Record<string, unknown>
+    const rep = newBranch.repeating as Record<string, unknown>
+    expect(rep.start_iso).toBe('2023-11-14T22:13:20.000Z')
   })
 })
 
@@ -128,8 +145,8 @@ describe('branch_schedule_repeating — input validation', () => {
     await expect(
       branchScheduleRepeating.execute(auth, {
         schedule_id: '',
-        new: newSchedule,
-        end_time: 1_700_003_600,
+        new: newScheduleIso,
+        end_time: '2023-11-14T23:13:20Z',
       }),
     ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
@@ -139,7 +156,7 @@ describe('branch_schedule_repeating — input validation', () => {
     await expect(
       branchScheduleRepeating.execute(auth, {
         schedule_id: 's-1',
-        end_time: 1_700_003_600,
+        end_time: '2023-11-14T23:13:20Z',
       }),
     ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
@@ -147,16 +164,16 @@ describe('branch_schedule_repeating — input validation', () => {
 
   it('end_time 누락 — zod throw', async () => {
     await expect(
-      branchScheduleRepeating.execute(auth, { schedule_id: 's-1', new: newSchedule }),
+      branchScheduleRepeating.execute(auth, { schedule_id: 's-1', new: newScheduleIso }),
     ).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)
   })
 
-  it('end_time 숫자가 아님 — zod throw', async () => {
+  it('end_time 잘못된 ISO — zod throw', async () => {
     await expect(
       branchScheduleRepeating.execute(auth, {
         schedule_id: 's-1',
-        new: newSchedule,
+        new: newScheduleIso,
         end_time: 'tomorrow',
       }),
     ).rejects.toThrow()
@@ -166,14 +183,14 @@ describe('branch_schedule_repeating — input validation', () => {
   it('userId 변조 시도(top-level) — body·auth에 흘러가지 않음', async () => {
     await branchScheduleRepeating.execute(auth, {
       schedule_id: 's-1',
-      new: newSchedule,
-      end_time: 1_700_003_600,
+      new: newScheduleIso,
+      end_time: '2023-11-14T23:13:20Z',
       userId: 'attacker',
     })
 
     expect(openApiSpy.lastAuth).toBe(auth)
     expect(openApiSpy.lastBody).toEqual({
-      new: newSchedule,
+      new: newScheduleTs,
       end_time: 1_700_003_600,
     })
   })
@@ -181,12 +198,12 @@ describe('branch_schedule_repeating — input validation', () => {
   it('nested userId(new 안) — zod strip으로 백엔드까지 안 흐름 (contract pin)', async () => {
     await branchScheduleRepeating.execute(auth, {
       schedule_id: 's-1',
-      new: { ...newSchedule, userId: 'attacker' },
-      end_time: 1_700_003_600,
+      new: { ...newScheduleIso, userId: 'attacker' },
+      end_time: '2023-11-14T23:13:20Z',
     })
 
     expect(openApiSpy.lastBody).toEqual({
-      new: newSchedule,
+      new: newScheduleTs,
       end_time: 1_700_003_600,
     })
   })
@@ -199,8 +216,8 @@ describe('branch_schedule_repeating — error wrap', () => {
     await expect(
       branchScheduleRepeating.execute(auth, {
         schedule_id: 'missing',
-        new: newSchedule,
-        end_time: 1_700_003_600,
+        new: newScheduleIso,
+        end_time: '2023-11-14T23:13:20Z',
       }),
     ).rejects.toThrow(/The requested resource does not exist\. \(schedule missing\)/)
   })
@@ -211,8 +228,8 @@ describe('branch_schedule_repeating — error wrap', () => {
     await expect(
       branchScheduleRepeating.execute(auth, {
         schedule_id: 's-1',
-        new: newSchedule,
-        end_time: 1_700_003_600,
+        new: newScheduleIso,
+        end_time: '2023-11-14T23:13:20Z',
       }),
     ).rejects.toThrow(/The request parameters are invalid\. \(end_time invalid\)/)
   })

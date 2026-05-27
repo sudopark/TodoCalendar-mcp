@@ -68,17 +68,34 @@ describe('revert_done_todo — happy path', () => {
     expect(openApiSpy.lastPath).toBe('/v2/open/todos/dones/done%2Fwith%20space/revert')
   })
 
-  it('raw 응답 그대로 반환 (passthrough — detail 포함)', async () => {
+  it('raw ts 보존 + *_iso 형제 필드 추가 (todo.create_timestamp_iso)', async () => {
     const raw = {
-      todo: { uuid: 't-1', userId: 'u-1', name: 'task', is_current: false, create_timestamp: 1 },
+      todo: {
+        uuid: 't-1',
+        userId: 'u-1',
+        name: 'task',
+        is_current: false,
+        create_timestamp: 1_700_000_000,
+        event_time: { time_type: 'at', timestamp: 1_700_003_600 },
+      },
       detail: { place: 'home', url: null, memo: 'restored' },
       extra_unknown_field: 'kept',
     }
     openApiSpy.responsePayload = raw
 
     const result = await revertDoneTodo.execute(auth, { done_todo_id: 'done-1' })
+    const r = result as Record<string, unknown>
+    const todo = r.todo as Record<string, unknown>
 
-    expect(result).toEqual(raw)
+    // raw 보존
+    expect(r).toMatchObject({ detail: raw.detail, extra_unknown_field: 'kept' })
+    expect(todo).toMatchObject(raw.todo)
+    // create_timestamp_iso 추가
+    expect(todo.create_timestamp_iso).toBe('2023-11-14T22:13:20.000Z')
+    // event_time.timestamp_iso 추가
+    const et = todo.event_time as Record<string, unknown>
+    expect(et.timestamp).toBe(1_700_003_600)
+    expect(et.timestamp_iso).toBe('2023-11-14T23:13:20.000Z')
   })
 
   it('detail null인 응답도 통과 (nullable)', async () => {
@@ -90,7 +107,7 @@ describe('revert_done_todo — happy path', () => {
 
     const result = await revertDoneTodo.execute(auth, { done_todo_id: 'done-1' })
 
-    expect(result).toEqual(raw)
+    expect(result).toMatchObject(raw)
   })
 })
 

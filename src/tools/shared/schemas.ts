@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { parseOffsetSeconds } from './time.js'
 
 const TS_SEC =
   'Unix epoch seconds (UTC). Convert with `new Date(value * 1000)` if a wall-clock representation is needed.'
@@ -24,7 +25,97 @@ const eventTimeAllDay = z.object({
 export const eventTimeSchema = z
   .discriminatedUnion('time_type', [eventTimeAt, eventTimePeriod, eventTimeAllDay])
   .describe(
-    "Tagged union by `time_type`: 'at' (single moment), 'period' (start..end), 'allday' (date range with timezone).",
+    "Tagged union by `time_type`: 'at' (single moment), 'period' (start..end), 'allday' (date range with timezone). Responses include the following `*_iso` siblings: 'at' → timestamp_iso (UTC ISO); 'period' → period_start_iso + period_end_iso (UTC ISO); 'allday' → period_start_iso + period_end_iso (YYYY-MM-DD local date computed from `seconds_from_gmt`). Raw Unix-second fields are preserved alongside.",
+  )
+
+const ISO_DESC =
+  "ISO 8601 datetime with timezone offset (e.g. \"2026-05-22T10:00:00+09:00\" or \"...Z\"). Server converts to Unix epoch seconds. Use the end user's timezone offset."
+
+// 공통 ISO 8601 → Unix epoch seconds 변환. transform context에 issue를 추가하고 실패 시 z.NEVER.
+// offset 필수: naked datetime은 ISO 8601 상 "타임존 미지정"이고 Date.parse가 로컬 TZ로 해석해
+// 실행 머신(Cloud Run vs dev)마다 다른 ts가 나옴. UTC도 'Z' 명시 필요.
+const isoStringToTs = (s: string, ctx: z.RefinementCtx): number => {
+  const ms = Date.parse(s)
+  if (Number.isNaN(ms)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `invalid ISO 8601 datetime: ${s}` })
+    return z.NEVER
+  }
+  try {
+    parseOffsetSeconds(s)
+  } catch (e) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message })
+    return z.NEVER
+  }
+  return Math.floor(ms / 1000)
+}
+
+// ISO 8601 문자열을 받아 Unix epoch seconds로 변환하는 입력 전용 스키마.
+// 잘못된 ISO는 zod 검증 에러 → tool이 throw(백엔드 호출 X).
+const isoToTs = z.string().transform((s, ctx) => isoStringToTs(s, ctx))
+
+export const isoToTsField = isoToTs.describe(ISO_DESC)
+
+const eventTimeAtIso = z.object({ time_type: z.literal('at'), timestamp: z.string() })
+const eventTimePeriodIso = z.object({
+  time_type: z.literal('period'),
+  period_start: z.string(),
+  period_end: z.string(),
+})
+const eventTimeAllDayIso = z.object({
+  time_type: z.literal('allday'),
+  period_start: z.string(),
+  period_end: z.string(),
+})
+
+// 입력 event_time: ISO 문자열을 받아 openAPI body 모양(ts + allday의 seconds_from_gmt)으로 transform.
+export const eventTimeInputSchema = z
+  .discriminatedUnion('time_type', [eventTimeAtIso, eventTimePeriodIso, eventTimeAllDayIso])
+  .transform((v, ctx) => {
+    switch (v.time_type) {
+      case 'at':
+        return { time_type: 'at' as const, timestamp: isoStringToTs(v.timestamp, ctx) }
+      case 'period':
+        return {
+          time_type: 'period' as const,
+          period_start: isoStringToTs(v.period_start, ctx),
+          period_end: isoStringToTs(v.period_end, ctx),
+        }
+      case 'allday': {
+        let secondsFromGmt = 0
+        try {
+          secondsFromGmt = parseOffsetSeconds(v.period_start)
+        } catch (e) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message })
+        }
+        return {
+          time_type: 'allday' as const,
+          period_start: isoStringToTs(v.period_start, ctx),
+          period_end: isoStringToTs(v.period_end, ctx),
+          seconds_from_gmt: secondsFromGmt,
+        }
+      }
+    }
+  })
+  .describe(
+    "Input event_time. Tagged union by `time_type` ('at' | 'period' | 'allday'). All time fields are ISO 8601 strings WITH timezone offset; the server converts to Unix epoch seconds. For 'allday', seconds_from_gmt is derived from the offset (do not pass it).",
+  )
+
+// 입력 repeating: start/end를 ISO로 받아 ts로 transform. option은 opaque passthrough.
+export const repeatingInputSchema = z
+  .object({
+    start: z.string(),
+    option: z.unknown(),
+    end: z.string().nullish(),
+    end_count: z.number().nullish(),
+  })
+  .transform((v, ctx) => ({
+    start: isoStringToTs(v.start, ctx),
+    option: v.option,
+    ...(v.end !== undefined && v.end !== null ? { end: isoStringToTs(v.end, ctx) } : {}),
+    ...(v.end_count !== undefined && v.end_count !== null ? { end_count: v.end_count } : {}),
+  }))
+  .describe(
+    'Input recurrence rule. `start`/`end` are ISO 8601 strings (server → Unix seconds). `option` is the discriminated recurrence object (see repeatingSchema description).',
   )
 
 // option은 string처럼 보이지만 실제로는 optionType 디스크리미네이터 object.
@@ -46,7 +137,7 @@ export const repeatingSchema = z
     end: z.number().nullish().describe(`${TS_SEC} Null if no end date.`),
     end_count: z.number().nullish().describe('Number of occurrences. Null if not capped by count.'),
   })
-  .describe('Recurrence rule with start, option payload, and optional end (date or count).')
+  .describe('Recurrence rule with start, option payload, and optional end (date or count). Responses also include `start_iso` / `end_iso` (UTC ISO).')
 
 export const todoSchema = z
   .object({
@@ -75,7 +166,7 @@ export const todoSchema = z
       .nullish()
       .describe('For repeating todos: identifier of the specific occurrence (turn).'),
   })
-  .describe('A todo item. All timestamps are Unix epoch seconds (UTC).')
+  .describe('A todo item. Raw Unix-second timestamps are preserved; responses also include `create_timestamp_iso` and `event_time` / `repeating` `*_iso` siblings (see those schemas).')
 
 export const doneTodoSchema = z
   .object({
@@ -91,7 +182,7 @@ export const doneTodoSchema = z
     event_tag_id: z.string().nullish(),
     notification_options: z.array(z.unknown()).nullish(),
   })
-  .describe('A completed (done) todo. All timestamps are Unix epoch seconds (UTC).')
+  .describe('A completed (done) todo. Raw Unix-second timestamps are preserved; responses also include `done_at_iso` and `event_time` `*_iso` siblings.')
 
 export const scheduleSchema = z
   .object({
@@ -112,10 +203,10 @@ export const scheduleSchema = z
       .array(z.number())
       .nullish()
       .describe(
-        `Occurrence start timestamps that are excluded from the recurrence. Each value is ${TS_SEC}`,
+        `Occurrence start timestamps that are excluded from the recurrence. Each value is a Unix epoch second. A sibling \`exclude_repeatings_iso: string[]\` (UTC ISO) is included in the response.`,
       ),
   })
-  .describe('A schedule (calendar event). All timestamps are Unix epoch seconds (UTC).')
+  .describe('A schedule (calendar event). Raw Unix-second timestamps are preserved; responses also include `event_time` / `repeating` `*_iso` siblings and `exclude_repeatings_iso` (UTC ISO array).')
 
 export const eventTagSchema = z
   .object({

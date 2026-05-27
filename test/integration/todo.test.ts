@@ -65,9 +65,9 @@ describe.skipIf(!readiness.ready)('integration: todo happy path', () => {
     const auth = makeIntegrationAuth()
     const origin = (await createTodo.execute(auth, {
       name: 'origin-repeating',
-      event_time: { time_type: 'at', timestamp: 1_700_000_000 },
+      event_time: { time_type: 'at', timestamp: '2023-11-14T22:13:20Z' },
       repeating: {
-        start: 1_700_000_000,
+        start: '2023-11-14T22:13:20Z',
         option: { optionType: 'every_day', interval: 1 },
       },
     })) as { uuid: string }

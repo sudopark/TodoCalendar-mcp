@@ -3,6 +3,7 @@ import type { Server as HttpServer } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OAuthTokenError } from '../src/auth/oauthVerify.js'
 import type { Auth } from '../src/auth/types.js'
+import { hashUserId } from '../src/internal/hashUserId.js'
 
 const verifyOAuthTokenMock = vi.fn()
 
@@ -416,6 +417,22 @@ describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1
     expect(body.error.message).toMatch(/too large/i)
   })
 
+  it('extractor 일반 Error throw — 500 + body에 err.message 노출 없음 (#62 보안 리뷰)', async () => {
+    // verifyOAuthToken이 OAuthTokenError가 아닌 일반 Error로 throw하면 mcpAuth가 next(e)로 위임,
+    // jsonRpcErrorHandler fallback이 500을 응답한다. 이때 err.message가 body에 그대로 실리면
+    // env 키 이름·JWKS URL·내부 stack 정보 등이 LLM client에 흘러갈 수 있어 generic 코드만 노출해야 함.
+    verifyOAuthTokenMock.mockRejectedValue(new Error('internal: DB_URL=postgres://...'))
+    const res = await fetch(`${oauthUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer x.y.z' },
+      body: '{}',
+    })
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as Record<string, unknown>
+    expect(body).toEqual({ error: 'internal_error' })
+    expect(body['message']).toBeUndefined()
+  })
+
   it('정상 token — auth gate 통과 (initialize 200)', async () => {
     verifyOAuthTokenMock.mockResolvedValue({
       userId: 'oauth-user-1',
@@ -442,6 +459,92 @@ describe('OAuth mode — 401 + WWW-Authenticate (RFC 6750 §3.1 / RFC 9728 §5.1
     })
     expect(res.status).toBe(200)
     expect(verifyOAuthTokenMock).toHaveBeenCalledWith('valid.token.here')
+  })
+})
+
+describe('usage logging — auth 통과 시 mcp_call 구조화 로그 1회 출력', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>
+
+  beforeAll(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+  })
+
+  afterAll(() => {
+    logSpy.mockRestore()
+  })
+
+  beforeEach(() => {
+    logSpy.mockClear()
+  })
+
+  const callLogs = (): Record<string, unknown>[] =>
+    (logSpy.mock.calls as unknown[][])
+      .map((call) => {
+        try {
+          return JSON.parse(String(call[0])) as Record<string, unknown>
+        } catch {
+          return null
+        }
+      })
+      .filter((v): v is Record<string, unknown> => v !== null && v['event'] === 'mcp_call')
+
+  it('tools/list — mcp_call 한 줄, raw userId 노출 없음', async () => {
+    await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'x-dev-user-id': 'dev-user-xyz',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    })
+
+    const logs = callLogs()
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toMatchObject({
+      severity: 'INFO',
+      event: 'mcp_call',
+      method: 'tools/list',
+      userIdHash: hashUserId('dev-user-xyz'),
+    })
+    expect(logs[0]?.['toolName']).toBeUndefined()
+    // raw sub은 stdout에 절대 노출되지 않아야 함
+    const all = (logSpy.mock.calls as unknown[][]).map((c) => String(c[0])).join('\n')
+    expect(all).not.toContain('dev-user-xyz')
+  })
+
+  it('tools/call — toolName이 method=tools/call에서만 채워짐', async () => {
+    await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'x-dev-user-id': 'dev-user-xyz',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_tags', arguments: {} },
+      }),
+    })
+
+    const logs = callLogs()
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toMatchObject({
+      event: 'mcp_call',
+      method: 'tools/call',
+      toolName: 'get_tags',
+    })
+  })
+
+  it('auth 실패 — mcp_call 로그 안 찍힘 (auth 통과 후 진입점이라)', async () => {
+    await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    expect(callLogs()).toHaveLength(0)
   })
 })
 

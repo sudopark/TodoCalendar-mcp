@@ -29,6 +29,14 @@ const openApiSpy: OpenApiSpy = {
   responseError: null,
 }
 
+// buildCallToolResult / buildErrorResult가 LLM 가드 마커로 text를 감싸므로(#59, #60)
+// payload 검사하려면 안의 JSON 본문만 떼서 파싱한다. 본문에는 `{`/`}`가 마커 외엔 없음.
+const parsePayloadFromWrappedText = (text: string): unknown => {
+  const match = text.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error(`no JSON object found in wrapped text: ${text}`)
+  return JSON.parse(match[0])
+}
+
 vi.mock('../../src/openapi/client.js', () => ({
   callOpenApi: async (auth: Auth, method: string, path: string, body?: unknown) => {
     openApiSpy.lastAuth = auth
@@ -151,7 +159,8 @@ describe('mcp server — tools/call', () => {
 
     expect(result.isError).toBeFalsy()
     expect(result.structuredContent).toBeUndefined()
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(raw) }])
+    const text = (result.content as { text: string }[])[0]?.text
+    expect(text).toContain(JSON.stringify(raw))
     expect(openApiSpy.lastAuth).toEqual(auth)
     expect(openApiSpy.lastPath).toBe('/v2/open/tags/')
   })
@@ -229,7 +238,7 @@ describe('mcp server — tools/call', () => {
 
     // 메시지가 raw zod issue array (JSON 문자열)이 아닌 자연어로 가공돼야 함
     const text = (result.content as Array<{ text: string }>)[0]!.text
-    const payload = JSON.parse(text)
+    const payload = parsePayloadFromWrappedText(text) as { code?: string; message: string }
     expect(payload.code).toBe('InvalidParameter')
     expect(payload.message).not.toMatch(/^\[/) // raw JSON 배열 시작 차단
     // naturalize prefix — wrapOpenApiError와 동일 형식 일관성 (NATURAL map 경유)
@@ -244,7 +253,7 @@ describe('mcp server — tools/call', () => {
     expect(result.isError).toBe(true)
     expect(result._meta).toEqual({ code: 'InvalidParameter', status: 400 })
     const text = (result.content as Array<{ text: string }>)[0]!.text
-    const payload = JSON.parse(text)
+    const payload = parsePayloadFromWrappedText(text) as { code?: string; message: string }
     expect(payload.message).toMatch(/^The request parameters are invalid\. \(/)
     expect(payload.message).toContain('name:')
     expect(payload.message.toLowerCase()).toContain('string')
@@ -262,7 +271,7 @@ describe('mcp server — tools/call', () => {
     expect(result.isError).toBe(true)
     expect(result._meta).toEqual({ code: 'InvalidParameter', status: 400 })
     const text = (result.content as Array<{ text: string }>)[0]!.text
-    const payload = JSON.parse(text)
+    const payload = parsePayloadFromWrappedText(text) as { code?: string; message: string }
     expect(payload.message).toMatch(/^The request parameters are invalid\. \(/)
     expect(payload.message).toContain('name:')
     expect(payload.message).toContain('color_hex:')
