@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-24개 tool 구현 + unit/integration 테스트 + OAuth Resource Server까지 도달. Cloud Run prod 배포 완료, npm 패키지는 npmjs.com `todocalendar-tools`로 publish (이슈 #47 — GitHub Packages에서 이전). 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
+27개 tool 구현 (foremost event 3종 추가 — #66) + unit/integration 테스트 + OAuth Resource Server까지 도달. Cloud Run prod 배포 완료, npm 패키지는 npmjs.com `todocalendar-tools`로 publish (이슈 #47 — GitHub Packages에서 이전). 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
 
 ## What this is
 

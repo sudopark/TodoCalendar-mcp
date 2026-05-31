@@ -1,6 +1,11 @@
 import { deleteDoneTodo, getDoneTodos, revertDoneTodo, updateDoneTodo } from './doneTodoTools.js'
 import { deleteEventDetail, getEventDetails, setEventDetail } from './eventDetailTools.js'
 import {
+  clearForemostEvent,
+  getForemostEvent,
+  setForemostEvent,
+} from './foremostEventTools.js'
+import {
   branchScheduleRepeating,
   createSchedule,
   deleteSchedule,
@@ -39,6 +44,7 @@ const buildRegistry = (
 
 export const tools = buildRegistry([
   branchScheduleRepeating as AnyToolDefinition,
+  clearForemostEvent as AnyToolDefinition,
   completeTodo as AnyToolDefinition,
   createSchedule as AnyToolDefinition,
   createTag as AnyToolDefinition,
@@ -51,6 +57,7 @@ export const tools = buildRegistry([
   excludeScheduleOccurrence as AnyToolDefinition,
   getDoneTodos as AnyToolDefinition,
   getEventDetails as AnyToolDefinition,
+  getForemostEvent as AnyToolDefinition,
   getSchedules as AnyToolDefinition,
   getTags as AnyToolDefinition,
   getTodos as AnyToolDefinition,
@@ -58,6 +65,7 @@ export const tools = buildRegistry([
   replaceTodo as AnyToolDefinition,
   revertDoneTodo as AnyToolDefinition,
   setEventDetail as AnyToolDefinition,
+  setForemostEvent as AnyToolDefinition,
   updateDoneTodo as AnyToolDefinition,
   updateSchedule as AnyToolDefinition,
   updateTag as AnyToolDefinition,
@@ -66,6 +74,7 @@ export const tools = buildRegistry([
 
 export {
   branchScheduleRepeating,
+  clearForemostEvent,
   completeTodo,
   createSchedule,
   createTag,
@@ -78,6 +87,7 @@ export {
   excludeScheduleOccurrence,
   getDoneTodos,
   getEventDetails,
+  getForemostEvent,
   getSchedules,
   getTags,
   getTodos,
@@ -85,6 +95,7 @@ export {
   replaceTodo,
   revertDoneTodo,
   setEventDetail,
+  setForemostEvent,
   updateDoneTodo,
   updateSchedule,
   updateTag,
