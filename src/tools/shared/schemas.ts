@@ -228,6 +228,26 @@ export const eventDetailSchema = z
   })
   .describe('Optional metadata attached to a todo or schedule.')
 
+// foremost event = 사용자당 단일 "가장 중요한 이벤트" 포인터. `event`는 `is_todo`로 분기된
+// 대상 todo/schedule 원본. 미지정(unset) 상태에선 응답이 빈 객체 `{}` — 전 필드 optional.
+// outputSchema는 §6 문서 채널 전용이라 union의 엄밀한 discrimination은 필요 없음 — LLM에
+// 모양 힌트만 제공.
+export const foremostEventSchema = z
+  .object({
+    event_id: z.string().optional().describe('UUID of the foremost event (todo or schedule).'),
+    is_todo: z
+      .boolean()
+      .optional()
+      .describe('Discriminator — true → `event` is a todo, false → schedule.'),
+    event: z
+      .union([todoSchema, scheduleSchema])
+      .optional()
+      .describe('Embedded todo or schedule, discriminated by `is_todo`.'),
+  })
+  .describe(
+    'Foremost event pointer. When set: { event_id, is_todo, event }. When unset: {} (empty object). The embedded `event` has the same shape as the corresponding todo / schedule and includes the same `*_iso` siblings for timestamps.',
+  )
+
 // §6 raw passthrough — outputSchema는 LLM에 노출되는 description 채널일 뿐, runtime parse하지 않는다.
 // openAPI가 추가 필드를 돌려주더라도 그대로 흘러가야 round-trip·감사로그 무손실 약속이 유지됨.
 export const statusOkSchema = z
