@@ -5,6 +5,7 @@ describe('tools registry', () => {
   it('등록된 tool 모두 — 키는 각 tool의 name과 일치', () => {
     expect(Object.keys(tools).sort()).toEqual([
       'branch_schedule_repeating',
+      'clear_foremost_event',
       'complete_todo',
       'create_schedule',
       'create_tag',
@@ -17,6 +18,7 @@ describe('tools registry', () => {
       'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
+      'get_foremost_event',
       'get_schedules',
       'get_tags',
       'get_todos',
@@ -24,6 +26,7 @@ describe('tools registry', () => {
       'replace_todo',
       'revert_done_todo',
       'set_event_detail',
+      'set_foremost_event',
       'update_done_todo',
       'update_schedule',
       'update_tag',

@@ -90,6 +90,7 @@ describe('mcp server — tools/list', () => {
 
     expect(result.tools.map((t) => t.name).sort()).toEqual([
       'branch_schedule_repeating',
+      'clear_foremost_event',
       'complete_todo',
       'create_schedule',
       'create_tag',
@@ -102,6 +103,7 @@ describe('mcp server — tools/list', () => {
       'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
+      'get_foremost_event',
       'get_schedules',
       'get_tags',
       'get_todos',
@@ -109,6 +111,7 @@ describe('mcp server — tools/list', () => {
       'replace_todo',
       'revert_done_todo',
       'set_event_detail',
+      'set_foremost_event',
       'update_done_todo',
       'update_schedule',
       'update_tag',

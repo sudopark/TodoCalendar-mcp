@@ -36,15 +36,16 @@ token에 필요한 scope이 박혀 있어야 함:
 
 ### Tools
 
-24개. 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
+27개. 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
 
-| 도메인           | tools                                                                                                                                                                     | CONFIRM           |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| **todo**         | `get_todos` / `create_todo` / `update_todo` / `complete_todo` / `replace_todo` / `delete_todo`                                                                            | `delete_todo`     |
-| **schedule**     | `get_schedules` / `create_schedule` / `update_schedule` / `exclude_schedule_occurrence` / `replace_schedule_occurrence` / `branch_schedule_repeating` / `delete_schedule` | `delete_schedule` |
-| **tag**          | `get_tags` / `create_tag` / `update_tag` / `delete_tag`                                                                                                                   | —                 |
-| **done todo**    | `get_done_todos` / `update_done_todo` / `revert_done_todo` / `delete_done_todo`                                                                                           | —                 |
-| **event detail** | `get_event_details` / `set_event_detail` / `delete_event_detail`                                                                                                          | —                 |
+| 도메인             | tools                                                                                                                                                                     | CONFIRM           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| **todo**           | `get_todos` / `create_todo` / `update_todo` / `complete_todo` / `replace_todo` / `delete_todo`                                                                            | `delete_todo`     |
+| **schedule**       | `get_schedules` / `create_schedule` / `update_schedule` / `exclude_schedule_occurrence` / `replace_schedule_occurrence` / `branch_schedule_repeating` / `delete_schedule` | `delete_schedule` |
+| **tag**            | `get_tags` / `create_tag` / `update_tag` / `delete_tag`                                                                                                                   | —                 |
+| **done todo**      | `get_done_todos` / `update_done_todo` / `revert_done_todo` / `delete_done_todo`                                                                                           | —                 |
+| **event detail**   | `get_event_details` / `set_event_detail` / `delete_event_detail`                                                                                                          | —                 |
+| **foremost event** | `get_foremost_event` / `set_foremost_event` / `clear_foremost_event`                                                                                                      | —                 |
 
 상세 입출력 스키마는 `tools/list` 응답 또는 각 tool의 `description` / `inputSchema` 참고.
 
