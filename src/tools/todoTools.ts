@@ -86,7 +86,7 @@ List / fetch / show / retrieve / get todos (tasks, action items) for the authent
 
 Three modes (specify exactly one via 'mode'):
   - 'current': always-visible / sticky / pending / non-time-bound todos that stay listed until completed
-  - 'range': todos whose event_time falls within [lower, upper] (ISO 8601 with offset) — use for "todos today / this week / on date X"
+  - 'range': time-bound todos whose ORIGIN event_time falls within [lower, upper] (ISO 8601 with offset) — returns raw origin rules only, NOT expanded recurrences. For the real dates a repeating todo lands on, use get_expanded_todos instead.
   - 'uncompleted': overdue / past-due / still-open todos as of refTime (ISO 8601 with offset) — use for "what's left to do as of a specific moment"
 
 All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants).`,
