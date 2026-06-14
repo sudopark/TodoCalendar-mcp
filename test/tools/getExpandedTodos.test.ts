@@ -83,10 +83,8 @@ describe('get_expanded_todos', () => {
       events: {
         'todo-1': {
           uuid: 'todo-1',
-          userId: 'u-1',
           name: 'standup',
-          is_current: false,
-          create_timestamp: 1_690_000_000,
+          is_todo: true,
           event_time: { time_type: 'at', timestamp: 1_700_000_000 },
           repeating: { start: 1_690_000_000, option: { optionType: 'every_day', interval: 1 } },
         },
@@ -113,7 +111,6 @@ describe('get_expanded_todos', () => {
     expect(result.occurrences[0]?.event_time.timestamp_iso).toBe('2023-11-15T22:13:20.000Z')
     expect(result.occurrences[0]?.event_time.timestamp).toBe(1_700_086_400)
     expect(result.events['todo-1']?.repeating.start_iso).toBe('2023-07-22T04:26:40.000Z')
-    expect(result.events['todo-1']?.create_timestamp_iso).toBe('2023-07-22T04:26:40.000Z')
     expect(result.next_cursor).toBeNull()
   })
 
@@ -130,5 +127,27 @@ describe('get_expanded_todos', () => {
   it('metadata — name·scope', () => {
     expect(getExpandedTodos.name).toBe('get_expanded_todos')
     expect(getExpandedTodos.scopes).toEqual(['read:calendar'])
+  })
+
+  // 실제 openAPI(#244)의 events는 정규화 축소 객체 — uuid/name/is_todo/event_time/repeating만.
+  // is_current·userId·create_timestamp 등은 없음. full todoSchema로 문서화하면 outputSchema 검증
+  // 클라가 'userId/is_current 누락'으로 거부함.
+  it('outputSchema가 정규화 events(userId 없음·is_todo 있음)를 허용 — Inspector validation 회귀', () => {
+    const real = {
+      events: {
+        t1: {
+          uuid: 't1',
+          name: 'standup',
+          is_todo: true,
+          event_time: { time_type: 'at', timestamp: 1_700_000_000 },
+          repeating: { start: 1_690_000_000, option: { optionType: 'every_day', interval: 1 } },
+        },
+      },
+      occurrences: [
+        { origin_event_id: 't1', turn: 1, event_time: { time_type: 'at', timestamp: 1_700_000_000 } },
+      ],
+      next_cursor: null,
+    }
+    expect(() => getExpandedTodos.outputSchema.parse(real)).not.toThrow()
   })
 })

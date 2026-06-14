@@ -8,6 +8,7 @@ import {
   doneTodoSchema,
   eventDetailSchema,
   eventTimeInputSchema,
+  expandedEventSchema,
   isoToTsField,
   occurrenceSchema,
   repeatingInputSchema,
@@ -132,9 +133,9 @@ type GetExpandedTodosInput = z.infer<typeof getExpandedTodosInput>
 const getExpandedTodosOutput = z
   .object({
     events: z
-      .record(z.string(), todoSchema)
+      .record(z.string(), expandedEventSchema)
       .describe(
-        'Origin todo metadata, keyed by origin_event_id, one entry per origin appearing on this page (includes the repeating rule).',
+        'Origin metadata (normalized: uuid/name/is_todo/event_time/repeating), keyed by origin_event_id, one entry per origin appearing on this page.',
       ),
     occurrences: z
       .array(occurrenceSchema)
