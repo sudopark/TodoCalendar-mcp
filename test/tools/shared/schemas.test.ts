@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   eventTimeInputSchema,
+  occurrenceSchema,
   repeatingInputSchema,
 } from '../../../src/tools/shared/schemas.js'
 
@@ -66,5 +67,26 @@ describe('repeatingInputSchema — ISO → ts transform', () => {
     expect(out.start).toBe(1_700_000_000)
     expect(out.end).toBe(1_700_003_600)
     expect(out.option).toEqual({ optionType: 'every_day', interval: 1 })
+  })
+})
+
+describe('occurrenceSchema', () => {
+  it('origin_event_id + turn + event_time(at) 통과', () => {
+    const parsed = occurrenceSchema.parse({
+      origin_event_id: 'todo-abc',
+      turn: 3,
+      event_time: { time_type: 'at', timestamp: 1_690_000_000 },
+    })
+    expect(parsed.turn).toBe(3)
+    expect(parsed.origin_event_id).toBe('todo-abc')
+  })
+
+  it('turn 누락 — throw', () => {
+    expect(() =>
+      occurrenceSchema.parse({
+        origin_event_id: 'x',
+        event_time: { time_type: 'at', timestamp: 1 },
+      }),
+    ).toThrow()
   })
 })
