@@ -36,12 +36,14 @@ token에 필요한 scope이 박혀 있어야 함:
 
 ### Tools
 
-27개. 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
+29개. 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
 
-| 도메인             | tools                                                                                                                                                                     | CONFIRM           |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| **todo**           | `get_todos` / `create_todo` / `update_todo` / `complete_todo` / `replace_todo` / `delete_todo`                                                                            | `delete_todo`     |
-| **schedule**       | `get_schedules` / `create_schedule` / `update_schedule` / `exclude_schedule_occurrence` / `replace_schedule_occurrence` / `branch_schedule_repeating` / `delete_schedule` | `delete_schedule` |
+기간 조회 시 반복 이벤트의 실제 발생일이 필요하면 `get_expanded_*` (서버가 occurrence 단위로 전개, Functions #244), 원본 규칙 메타만 필요하면 기존 `get_todos`/`get_schedules`를 쓴다.
+
+| 도메인             | tools                                                                                                                                                                                            | CONFIRM           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| **todo**           | `get_todos` / `get_expanded_todos` / `create_todo` / `update_todo` / `complete_todo` / `replace_todo` / `delete_todo`                                                                            | `delete_todo`     |
+| **schedule**       | `get_schedules` / `get_expanded_schedules` / `create_schedule` / `update_schedule` / `exclude_schedule_occurrence` / `replace_schedule_occurrence` / `branch_schedule_repeating` / `delete_schedule` | `delete_schedule` |
 | **tag**            | `get_tags` / `create_tag` / `update_tag` / `delete_tag`                                                                                                                   | —                 |
 | **done todo**      | `get_done_todos` / `update_done_todo` / `revert_done_todo` / `delete_done_todo`                                                                                           | —                 |
 | **event detail**   | `get_event_details` / `set_event_detail` / `delete_event_detail`                                                                                                          | —                 |

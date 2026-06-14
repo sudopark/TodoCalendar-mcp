@@ -104,12 +104,16 @@ describe('get_expanded_todos', () => {
     const result = (await getExpandedTodos.execute(auth, {
       lower: '2023-11-14T00:00:00Z',
       upper: '2023-11-15T00:00:00Z',
-    })) as Record<string, any>
+    })) as {
+      occurrences: Array<{ event_time: Record<string, unknown> }>
+      events: Record<string, { repeating: Record<string, unknown>; create_timestamp_iso?: unknown }>
+      next_cursor: string | null
+    }
 
-    expect(result.occurrences[0].event_time.timestamp_iso).toBe('2023-11-15T22:13:20.000Z')
-    expect(result.occurrences[0].event_time.timestamp).toBe(1_700_086_400)
-    expect(result.events['todo-1'].repeating.start_iso).toBe('2023-07-22T04:26:40.000Z')
-    expect(result.events['todo-1'].create_timestamp_iso).toBe('2023-07-22T04:26:40.000Z')
+    expect(result.occurrences[0]?.event_time.timestamp_iso).toBe('2023-11-15T22:13:20.000Z')
+    expect(result.occurrences[0]?.event_time.timestamp).toBe(1_700_086_400)
+    expect(result.events['todo-1']?.repeating.start_iso).toBe('2023-07-22T04:26:40.000Z')
+    expect(result.events['todo-1']?.create_timestamp_iso).toBe('2023-07-22T04:26:40.000Z')
     expect(result.next_cursor).toBeNull()
   })
 
