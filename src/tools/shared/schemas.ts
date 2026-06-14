@@ -28,6 +28,25 @@ export const eventTimeSchema = z
     "Tagged union by `time_type`: 'at' (single moment), 'period' (start..end), 'allday' (date range with timezone). Responses include the following `*_iso` siblings: 'at' → timestamp_iso (UTC ISO); 'period' → period_start_iso + period_end_iso (UTC ISO); 'allday' → period_start_iso + period_end_iso (YYYY-MM-DD local date computed from `seconds_from_gmt`). Raw Unix-second fields are preserved alongside.",
   )
 
+export const occurrenceSchema = z
+  .object({
+    origin_event_id: z
+      .string()
+      .describe('UUID of the origin event. Look up its full metadata in the response `events` map.'),
+    turn: z
+      .number()
+      .int()
+      .describe(
+        '1-based occurrence number counted from `repeating.start` (non-repeating events are always 1). Excluded occurrences do NOT consume a turn (subsequent numbers are not shifted). Synthesize a stable occurrence id as `"{origin_event_id}:{turn}"` if needed.',
+      ),
+    event_time: eventTimeSchema.describe(
+      'Computed event_time for THIS occurrence (Unix seconds; `*_iso` siblings added in the response).',
+    ),
+  })
+  .describe(
+    'A single expanded occurrence of an event. Lightweight — origin metadata (name, tags, repeating rule) lives once in the response `events` map, keyed by `origin_event_id`.',
+  )
+
 const ISO_DESC =
   "ISO 8601 datetime with timezone offset (e.g. \"2026-05-22T10:00:00+09:00\" or \"...Z\"). Server converts to Unix epoch seconds. Use the end user's timezone offset."
 
