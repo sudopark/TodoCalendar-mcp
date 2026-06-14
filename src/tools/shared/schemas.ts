@@ -227,6 +227,25 @@ export const scheduleSchema = z
   })
   .describe('A schedule (calendar event). Raw Unix-second timestamps are preserved; responses also include `event_time` / `repeating` `*_iso` siblings and `exclude_repeatings_iso` (UTC ISO array).')
 
+// expanded 응답의 `events` 값 — todo/schedule 공통 정규화 객체. openAPI(#244)가 full 엔티티가
+// 아니라 uuid/name/is_todo/event_time/repeating만 내려준다 (userId·create_timestamp·is_current·
+// event_tag_id 상세·show_turns·exclude_repeatings 등은 occurrence 응답에서 생략). full
+// todoSchema/scheduleSchema를 재사용하면 outputSchema 검증 클라(Inspector 등)가 누락 필드로 거부함.
+export const expandedEventSchema = z
+  .object({
+    uuid: z.string().describe('Origin event uuid — matches occurrences[].origin_event_id.'),
+    name: z.string(),
+    is_todo: z
+      .boolean()
+      .describe('Discriminator — true → origin is a todo, false → a schedule.'),
+    event_tag_id: z.string().nullish().describe('Tag uuid, if categorized. Omitted when untagged.'),
+    event_time: eventTimeSchema.optional(),
+    repeating: repeatingSchema.optional(),
+  })
+  .describe(
+    'Normalized origin metadata in an expanded response `events` map. Lighter than the full todo/schedule entity — only uuid/name/is_todo/event_time/repeating (userId, create_timestamp, etc. are omitted). Responses also include `event_time`/`repeating` `*_iso` siblings.',
+  )
+
 export const eventTagSchema = z
   .object({
     uuid: z.string(),

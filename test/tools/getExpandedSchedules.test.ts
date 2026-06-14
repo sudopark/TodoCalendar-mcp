@@ -85,8 +85,8 @@ describe('get_expanded_schedules', () => {
       events: {
         's-1': {
           uuid: 's-1',
-          userId: 'u-1',
           name: 'meeting',
+          is_todo: false,
           event_time: { time_type: 'at', timestamp: 1_700_000_000 },
           repeating: { start: 1_690_000_000, option: { optionType: 'every_day', interval: 1 } },
         },
@@ -129,5 +129,27 @@ describe('get_expanded_schedules', () => {
   it('metadata — name·scope', () => {
     expect(getExpandedSchedules.name).toBe('get_expanded_schedules')
     expect(getExpandedSchedules.scopes).toEqual(['read:calendar'])
+  })
+
+  // 실제 openAPI(#244)의 events는 정규화 축소 객체 — uuid/name/is_todo/event_time/repeating만.
+  // userId·event_tag_id·create_timestamp 등은 없음. full scheduleSchema로 문서화하면 Inspector 등
+  // outputSchema 검증 클라가 'userId 누락'으로 거부함.
+  it('outputSchema가 정규화 events(userId 없음·is_todo 있음)를 허용 — Inspector validation 회귀', () => {
+    const real = {
+      events: {
+        s1: {
+          uuid: 's1',
+          name: 'meeting',
+          is_todo: false,
+          event_time: { time_type: 'at', timestamp: 1_700_000_000 },
+          repeating: { start: 1_690_000_000, option: { optionType: 'every_day', interval: 1 } },
+        },
+      },
+      occurrences: [
+        { origin_event_id: 's1', turn: 1, event_time: { time_type: 'at', timestamp: 1_700_000_000 } },
+      ],
+      next_cursor: null,
+    }
+    expect(() => getExpandedSchedules.outputSchema.parse(real)).not.toThrow()
   })
 })
