@@ -612,6 +612,8 @@ describe('end-to-end — POST /mcp + initialize handshake', () => {
       'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
+      'get_expanded_schedules',
+      'get_expanded_todos',
       'get_foremost_event',
       'get_schedules',
       'get_tags',
