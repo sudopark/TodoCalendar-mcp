@@ -6,7 +6,9 @@ import { buildConfirmRequired, ensureConfirmToken } from './shared/confirm.js'
 import {
   confirmableStatusSchema,
   eventTimeInputSchema,
+  expandedEventSchema,
   isoToTsField,
+  occurrenceSchema,
   repeatingInputSchema,
   scheduleSchema,
 } from './shared/schemas.js'
@@ -32,7 +34,9 @@ export const getSchedules: ToolDefinition<GetSchedulesInput, GetSchedulesOutput>
   name: 'get_schedules',
   scopes: ['read:calendar'],
   description: `\
-List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user that overlap a time range [lower, upper] (ISO 8601 with offset) — use for "what's on my calendar today / this week / on date X".
+List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user whose ORIGIN event_time overlaps a time range [lower, upper] (ISO 8601 with offset).
+
+This returns ONLY raw origin events — repeating schedules come back with their recurrence rule and are NOT expanded to actual occurrence dates. If you need the real dates a recurring schedule falls on ("what's on my calendar today / this week / on date X"), use get_expanded_schedules instead. Use this tool when you want the origin rule/metadata itself (e.g. to edit the series).
 
 All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). 'exclude_repeatings' lists occurrence start timestamps that have been removed from the recurrence.`,
   inputSchema: getSchedulesInput,
@@ -44,6 +48,87 @@ All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-2
       return augmentIso(
         await callOpenApi<GetSchedulesOutput>(auth, 'GET', `/v2/open/schedules/?${qs.toString()}`),
       ) as GetSchedulesOutput
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const getExpandedSchedulesInput = z
+  .object({
+    lower: isoToTsField.describe('Range start (inclusive). ISO 8601 datetime with offset.'),
+    upper: isoToTsField.describe('Range end (inclusive). ISO 8601 datetime with offset.'),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Max occurrences per page (default 100, max 500 — values above 500 are clamped server-side).',
+      ),
+    cursor: z
+      .string()
+      .optional()
+      .describe(
+        'Opaque pagination cursor. Pass the previous response `next_cursor` verbatim to get the next page; omit for the first page.',
+      ),
+  })
+  .describe(
+    'Both lower and upper are required. The window `upper - lower` must be <= 1 year (server returns 400 otherwise) — split longer spans into per-year calls.',
+  )
+
+type GetExpandedSchedulesInput = z.infer<typeof getExpandedSchedulesInput>
+
+const getExpandedSchedulesOutput = z
+  .object({
+    events: z
+      .record(z.string(), expandedEventSchema)
+      .describe(
+        'Origin metadata (normalized: uuid/name/is_todo/event_time/repeating), keyed by origin_event_id, one entry per origin appearing on this page.',
+      ),
+    occurrences: z
+      .array(occurrenceSchema)
+      .describe('Time-ordered flat list of expanded occurrences for this page.'),
+    next_cursor: z
+      .string()
+      .nullable()
+      .describe('Opaque cursor for the next page; null on the last page.'),
+  })
+  .describe(
+    'Normalized expansion response: origin metadata (`events`) separated from per-occurrence rows (`occurrences`). Every absolute-time field carries a sibling `*_iso` (UTC ISO; allday → YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.',
+  )
+
+type GetExpandedSchedulesOutput = z.infer<typeof getExpandedSchedulesOutput>
+
+export const getExpandedSchedules: ToolDefinition<
+  GetExpandedSchedulesInput,
+  GetExpandedSchedulesOutput
+> = {
+  name: 'get_expanded_schedules',
+  scopes: ['read:calendar'],
+  description: `\
+List schedules over a time range [lower, upper] with REPEATING EVENTS EXPANDED to their actual occurrence dates — the server computes each recurrence turn (weekday accrual, month-end skip, leap year, lunar) so you never calculate dates yourself.
+
+USE THIS (not get_schedules) whenever you need the real dates a recurring schedule falls on — e.g. "what's on my calendar today / this week / next month", "when does my weekly meeting actually happen". get_schedules returns ONLY raw origin rules and does NOT expand recurrences.
+
+Response is normalized: 'events' maps origin_event_id → the origin schedule (metadata + repeating rule, one entry per origin); 'occurrences' is a time-ordered flat list of { origin_event_id, turn, event_time } — look up names/tags in 'events'. Paginated: pass the previous 'next_cursor' back via 'cursor' until it is null. Window must be <= 1 year. To advance an occurrence via replace_schedule_occurrence / exclude_schedule_occurrence, take the origin from 'events' and the occurrence's event_time.
+
+All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
+  inputSchema: getExpandedSchedulesInput,
+  outputSchema: getExpandedSchedulesOutput,
+  execute: async (auth: Auth, args: unknown): Promise<GetExpandedSchedulesOutput> => {
+    const { lower, upper, limit, cursor } = getExpandedSchedulesInput.parse(args)
+    const qs = new URLSearchParams({ lower: String(lower), upper: String(upper) })
+    if (limit !== undefined) qs.set('limit', String(limit))
+    if (cursor !== undefined) qs.set('cursor', cursor)
+    try {
+      return augmentIso(
+        await callOpenApi<GetExpandedSchedulesOutput>(
+          auth,
+          'GET',
+          `/v2/open/schedules/expanded?${qs.toString()}`,
+        ),
+      ) as GetExpandedSchedulesOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }

@@ -127,5 +127,7 @@ describe('get_schedules', () => {
   it('metadata', () => {
     expect(getSchedules.name).toBe('get_schedules')
     expect(getSchedules.description).toMatch(/ISO 8601/)
+    expect(getSchedules.description).toMatch(/get_expanded_schedules/)
+    expect(getSchedules.description).toMatch(/does not expand|raw origin/i)
   })
 })

@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-27개 tool 구현 (foremost event 3종 추가 — #66) + unit/integration 테스트 + OAuth Resource Server까지 도달. Cloud Run prod 배포 완료, npm 패키지는 npmjs.com `todocalendar-tools`로 publish (이슈 #47 — GitHub Packages에서 이전). 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
+29개 tool 구현 (expanded occurrence 조회 2종 추가 — #69) + unit/integration 테스트 + OAuth Resource Server까지 도달. Cloud Run prod 배포 완료, npm 패키지는 npmjs.com `todocalendar-tools`로 publish (이슈 #47 — GitHub Packages에서 이전). 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
+
+기간 조회 시 반복 전개가 필요하면 `get_expanded_{todos,schedules}` (occurrence 단위 응답, Functions #244 서버 전개), 원본 규칙 메타만 필요하면 기존 `get_{todos,schedules}`를 쓴다.
 
 ## What this is
 
