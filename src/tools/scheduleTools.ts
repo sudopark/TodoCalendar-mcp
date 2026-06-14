@@ -33,7 +33,9 @@ export const getSchedules: ToolDefinition<GetSchedulesInput, GetSchedulesOutput>
   name: 'get_schedules',
   scopes: ['read:calendar'],
   description: `\
-List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user that overlap a time range [lower, upper] (ISO 8601 with offset) — use for "what's on my calendar today / this week / on date X".
+List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user whose ORIGIN event_time overlaps a time range [lower, upper] (ISO 8601 with offset).
+
+This returns ONLY raw origin events — repeating schedules come back with their recurrence rule and are NOT expanded to actual occurrence dates. If you need the real dates a recurring schedule falls on ("what's on my calendar today / this week / on date X"), use get_expanded_schedules instead. Use this tool when you want the origin rule/metadata itself (e.g. to edit the series).
 
 All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). 'exclude_repeatings' lists occurrence start timestamps that have been removed from the recurrence.`,
   inputSchema: getSchedulesInput,
