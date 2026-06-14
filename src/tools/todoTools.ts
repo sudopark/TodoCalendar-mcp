@@ -9,6 +9,7 @@ import {
   eventDetailSchema,
   eventTimeInputSchema,
   isoToTsField,
+  occurrenceSchema,
   repeatingInputSchema,
   todoSchema,
 } from './shared/schemas.js'
@@ -97,6 +98,84 @@ All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-2
       return augmentIso(
         await callOpenApi<GetTodosOutput>(auth, 'GET', dispatchPath(input)),
       ) as GetTodosOutput
+    } catch (e) {
+      return wrapOpenApiError(e)
+    }
+  },
+}
+
+const getExpandedTodosInput = z
+  .object({
+    lower: isoToTsField.describe('Range start (inclusive). ISO 8601 datetime with offset.'),
+    upper: isoToTsField.describe('Range end (inclusive). ISO 8601 datetime with offset.'),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Max occurrences per page (default 100, max 500 — values above 500 are clamped server-side).',
+      ),
+    cursor: z
+      .string()
+      .optional()
+      .describe(
+        'Opaque pagination cursor. Pass the previous response `next_cursor` verbatim to get the next page; omit for the first page.',
+      ),
+  })
+  .describe(
+    'Both lower and upper are required. The window `upper - lower` must be <= 1 year (server returns 400 otherwise) — split longer spans into per-year calls.',
+  )
+
+type GetExpandedTodosInput = z.infer<typeof getExpandedTodosInput>
+
+const getExpandedTodosOutput = z
+  .object({
+    events: z
+      .record(z.string(), todoSchema)
+      .describe(
+        'Origin todo metadata, keyed by origin_event_id, one entry per origin appearing on this page (includes the repeating rule).',
+      ),
+    occurrences: z
+      .array(occurrenceSchema)
+      .describe('Time-ordered flat list of expanded occurrences for this page.'),
+    next_cursor: z
+      .string()
+      .nullable()
+      .describe('Opaque cursor for the next page; null on the last page.'),
+  })
+  .describe(
+    'Normalized expansion response: origin metadata (`events`) separated from per-occurrence rows (`occurrences`). Every absolute-time field carries a sibling `*_iso` (UTC ISO; allday → YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.',
+  )
+
+type GetExpandedTodosOutput = z.infer<typeof getExpandedTodosOutput>
+
+export const getExpandedTodos: ToolDefinition<GetExpandedTodosInput, GetExpandedTodosOutput> = {
+  name: 'get_expanded_todos',
+  scopes: ['read:calendar'],
+  description: `\
+List time-bound todos over a range [lower, upper] with REPEATING TODOS EXPANDED to their actual occurrence dates — the server computes each recurrence turn (weekday accrual, month-end skip, leap year, lunar) so you never calculate dates yourself.
+
+USE THIS (not get_todos mode="range") whenever you need the real dates a recurring todo falls on — e.g. "what repeating todos land this week", "when is this daily task next due". get_todos returns ONLY raw origin rules and does NOT expand recurrences. (Non-time-bound "current" todos and overdue lookups still use get_todos with mode="current" / "uncompleted" — expansion does not apply to those.)
+
+Response is normalized: 'events' maps origin_event_id → the origin todo (metadata + repeating rule, one entry per origin); 'occurrences' is a time-ordered flat list of { origin_event_id, turn, event_time } — look up names/tags in 'events'. Paginated: pass the previous 'next_cursor' back via 'cursor' until it is null. Window must be <= 1 year. NOTE: an occurrence's 'turn' is a number, whereas complete_todo / replace_todo expect 'next_repeating_turn' as a string — stringify the turn and take the origin object from 'events' when advancing an occurrence.
+
+All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
+  inputSchema: getExpandedTodosInput,
+  outputSchema: getExpandedTodosOutput,
+  execute: async (auth: Auth, args: unknown): Promise<GetExpandedTodosOutput> => {
+    const { lower, upper, limit, cursor } = getExpandedTodosInput.parse(args)
+    const qs = new URLSearchParams({ lower: String(lower), upper: String(upper) })
+    if (limit !== undefined) qs.set('limit', String(limit))
+    if (cursor !== undefined) qs.set('cursor', cursor)
+    try {
+      return augmentIso(
+        await callOpenApi<GetExpandedTodosOutput>(
+          auth,
+          'GET',
+          `/v2/open/todos/expanded?${qs.toString()}`,
+        ),
+      ) as GetExpandedTodosOutput
     } catch (e) {
       return wrapOpenApiError(e)
     }
