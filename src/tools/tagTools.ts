@@ -17,7 +17,8 @@ export const getTags: ToolDefinition<GetTagsInput, GetTagsOutput> = {
   name: 'get_tags',
   scopes: ['read:calendar'],
   description:
-    'List / fetch / show / get all event tags (categories / labels / groupings) belonging to the authenticated user — call before creating or updating todos/schedules with a tag to discover available tag ids. Tags are reusable labels assigned to todos and schedules.',
+    'List all event tags (categories / labels) belonging to the authenticated user — call before creating or updating todos/schedules with a tag to discover available tag ids.',
+  docs: 'List / fetch / show / get all event tags (categories / labels / groupings) belonging to the authenticated user — call before creating or updating todos/schedules with a tag to discover available tag ids. Tags are reusable labels assigned to todos and schedules.',
   inputSchema: getTagsInput,
   outputSchema: getTagsOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetTagsOutput> => {
@@ -53,6 +54,7 @@ export const createTag: ToolDefinition<CreateTagInput, CreateTagOutput> = {
   scopes: ['write:calendar'],
   description:
     'Create a new event tag (category) for the authenticated user. Returns the created tag with its assigned uuid.',
+  docs: 'Create a new event tag (category) for the authenticated user. Returns the created tag with its assigned uuid.',
   inputSchema: createTagInput,
   outputSchema: createTagOutput,
   execute: async (auth: Auth, args: unknown): Promise<CreateTagOutput> => {
@@ -89,6 +91,7 @@ export const updateTag: ToolDefinition<UpdateTagInput, UpdateTagOutput> = {
   scopes: ['write:calendar'],
   description:
     "Update an event tag's name and/or color. The tag's uuid stays the same. Names must be unique among the caller's tags.",
+  docs: "Update an event tag's name and/or color. The tag's uuid stays the same. Names must be unique among the caller's tags.",
   inputSchema: updateTagInput,
   outputSchema: updateTagOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateTagOutput> => {
@@ -125,6 +128,7 @@ export const deleteTag: ToolDefinition<DeleteTagInput, DeleteTagOutput> = {
   scopes: ['write:calendar'],
   description:
     "Delete an event tag belonging to the authenticated user. Returns { status: 'ok' }. Events that referenced the tag are NOT deleted — only the tag itself is removed.",
+  docs: "Delete an event tag belonging to the authenticated user. Returns { status: 'ok' }. Events that referenced the tag are NOT deleted — only the tag itself is removed.",
   inputSchema: deleteTagInput,
   outputSchema: deleteTagOutput,
   execute: async (auth: Auth, args: unknown): Promise<DeleteTagOutput> => {

@@ -6,7 +6,10 @@ import type { Auth, Scope } from '../../auth/types.js'
 // openAPI raw payloads pass through untouched (round-trip safety, audit log fidelity).
 export interface ToolDefinition<I, O> {
   readonly name: string
+  /** tools/list에 노출되는 탐색용 요약 (1–3문장). 목적 + 핵심 disambiguator만 (#73). */
   readonly description: string
+  /** 전체 사용 가이드 — describe_tool이 온디맨드 반환. decision guide·응답 모양·시간 정책 상세는 여기로. */
+  readonly docs: string
   // Required OAuth scopes for invocation. MCP RS enforces these against auth.scopes
   // at dispatch time (#23 §3). read tools get ['read:calendar']; mutation tools
   // get ['write:calendar']. Empty array is invalid — every tool must declare scope.

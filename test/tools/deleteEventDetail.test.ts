@@ -155,7 +155,7 @@ describe('delete_event_detail — metadata', () => {
     expect(deleteEventDetail.description).toMatch(/is_done/i)
   })
 
-  it('description은 done todo 자체 복원은 revert_done_todo를 쓰라고 안내', () => {
-    expect(deleteEventDetail.description).toMatch(/revert_done_todo/i)
+  it('docs는 done todo 자체 복원은 revert_done_todo를 쓰라고 안내 (#73 — 딥 가이드는 docs 채널)', () => {
+    expect(deleteEventDetail.docs).toMatch(/revert_done_todo/i)
   })
 })

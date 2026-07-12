@@ -252,8 +252,8 @@ describe('delete_todo — metadata', () => {
     expect(deleteTodo.description).toMatch(/confirmToken|two-step|confirm/i)
   })
 
-  it('description은 단일 occurrence 분기는 replace_todo + origin_next_event_time을 쓰라고 안내', () => {
-    expect(deleteTodo.description).toMatch(/replace_todo/i)
-    expect(deleteTodo.description).toMatch(/origin_next_event_time/i)
+  it('docs는 단일 occurrence 분기는 replace_todo + origin_next_event_time을 쓰라고 안내 (#73 — 딥 가이드는 docs 채널)', () => {
+    expect(deleteTodo.docs).toMatch(/replace_todo/i)
+    expect(deleteTodo.docs).toMatch(/origin_next_event_time/i)
   })
 })
