@@ -10,6 +10,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import { ZodError } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { tools as defaultTools, type AnyToolDefinition } from '../tools/index.js'
+import { usageInstructions } from '../tools/instructions.js'
 import { ToolError, naturalizeToolMessage } from '../tools/shared/errors.js'
 import { AuthInvariantError } from './errors.js'
 import { buildCallToolResult, buildErrorResult } from './result.js'
@@ -60,7 +61,11 @@ export const createMcpServer = (options: CreateMcpServerOptions = {}): Server =>
   const mcpTools =
     options.tools !== undefined ? Object.values(options.tools).map(toMcpTool) : DEFAULT_MCP_TOOLS
 
-  const server = new Server(info, { capabilities: { tools: {} } })
+  // instructions: tool별 반복 보일러플레이트를 대체하는 공통 정책 1회 서술 (#73).
+  const server = new Server(info, {
+    capabilities: { tools: {} },
+    instructions: usageInstructions,
+  })
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...mcpTools] }))
 
