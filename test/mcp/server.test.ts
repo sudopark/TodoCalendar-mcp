@@ -131,23 +131,12 @@ describe('mcp server — tools/list', () => {
     }
   })
 
-  it('array output 가진 tool은 outputSchema 없음 (get_tags 등)', async () => {
+  it('모든 tool — outputSchema 미송신 (#73 다이어트)', async () => {
     const { client } = await wireServer()
 
     const { tools } = await client.listTools()
-    const tags = tools.find((t) => t.name === 'get_tags')
 
-    expect(tags?.outputSchema).toBeUndefined()
-  })
-
-  it('object output 가진 tool은 outputSchema 노출 (get_event_details)', async () => {
-    const { client } = await wireServer()
-
-    const { tools } = await client.listTools()
-    const eventDetail = tools.find((t) => t.name === 'get_event_details')
-
-    expect(eventDetail?.outputSchema).toBeDefined()
-    expect(eventDetail?.outputSchema?.type).toBe('object')
+    for (const tool of tools) expect(tool.outputSchema).toBeUndefined()
   })
 })
 
