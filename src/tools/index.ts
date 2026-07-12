@@ -31,6 +31,7 @@ import {
 export type { ToolDefinition, AnyToolDefinition } from './shared/tool.js'
 export type { Auth } from '../auth/types.js'
 export { ToolError } from './shared/errors.js'
+export { usageInstructions } from './instructions.js'
 
 const buildRegistry = (
   defs: readonly AnyToolDefinition[],

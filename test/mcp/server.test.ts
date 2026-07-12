@@ -132,6 +132,16 @@ describe('mcp server — tools/list', () => {
     }
   })
 
+  it('initialize instructions — 공통 시간 정책·describe_tool 안내 노출 (#73)', async () => {
+    const { client } = await wireServer()
+
+    const instructions = client.getInstructions()
+
+    expect(instructions).toContain('ISO 8601')
+    expect(instructions).toContain('describe_tool')
+    expect(instructions).toContain('confirmToken')
+  })
+
   it('모든 tool — outputSchema 미송신 (#73 다이어트)', async () => {
     const { client } = await wireServer()
 
