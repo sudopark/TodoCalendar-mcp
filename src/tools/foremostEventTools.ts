@@ -22,6 +22,8 @@ export const getForemostEvent: ToolDefinition<GetForemostEventInput, GetForemost
   name: 'get_foremost_event',
   scopes: ['read:calendar'],
   description: `\
+Fetch the user's current "foremost" event — the single most important todo or schedule pinned by the user. Returns { event_id, is_todo, event } with the target embedded, or {} when nothing is pinned.`,
+  docs: `\
 Fetch the user's current "foremost" event — the single most important upcoming todo or schedule pinned by the user. Returns the pointer { event_id, is_todo, event } with the target embedded, or {} when nothing is pinned.
 
 The 'event' field is the full todo (when is_todo=true) or schedule (when is_todo=false) object, including the same '*_iso' siblings on timestamps. Use this when the user asks about "the most important thing" / "what's pinned" / "what's foremost".`,
@@ -66,6 +68,8 @@ export const setForemostEvent: ToolDefinition<SetForemostEventInput, SetForemost
   name: 'set_foremost_event',
   scopes: ['write:calendar'],
   description: `\
+Pin a todo or schedule as the user's "foremost" event — replaces any previous pin (upsert). Set 'is_todo' by source list: get_todos → true, get_schedules → false.`,
+  docs: `\
 Pin a todo or schedule as the user's "foremost" event — replaces any previous pin (upsert). Returns the new foremost pointer { event_id, is_todo, event } with the target embedded; the embedded 'event' carries the same '*_iso' siblings as the source todo/schedule.
 
 Set 'is_todo' based on which list event_id came from (get_todos → true; get_schedules → false). The openAPI does not auto-detect the kind.`,
@@ -102,6 +106,8 @@ export const clearForemostEvent: ToolDefinition<
   name: 'clear_foremost_event',
   scopes: ['write:calendar'],
   description: `\
+Unset the user's foremost pin — removes the pointer only; the pinned todo/schedule itself is NOT deleted. Returns { status: 'ok' }.`,
+  docs: `\
 Unset the user's foremost pin — removes the pointer only. The previously pinned todo or schedule is NOT deleted and remains in get_todos / get_schedules. Returns { status: 'ok' }.
 
 Not CONFIRM-gated: this is a pointer-clear, trivially reversible via set_foremost_event. To delete the underlying event itself, use delete_todo / delete_schedule (which are CONFIRM-gated).`,

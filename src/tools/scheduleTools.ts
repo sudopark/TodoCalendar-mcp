@@ -34,6 +34,8 @@ export const getSchedules: ToolDefinition<GetSchedulesInput, GetSchedulesOutput>
   name: 'get_schedules',
   scopes: ['read:calendar'],
   description: `\
+List schedules (calendar events) whose ORIGIN event_time overlaps [lower, upper] — raw origin rules only, recurrences NOT expanded. Use get_expanded_schedules for the actual dates recurring events fall on; use this tool to read/edit the series definition itself.`,
+  docs: `\
 List / fetch / show / get schedules (calendar events / appointments / meetings / time-blocked items) for the authenticated user whose ORIGIN event_time overlaps a time range [lower, upper] (ISO 8601 with offset).
 
 This returns ONLY raw origin events — repeating schedules come back with their recurrence rule and are NOT expanded to actual occurrence dates. If you need the real dates a recurring schedule falls on ("what's on my calendar today / this week / on date X"), use get_expanded_schedules instead. Use this tool when you want the origin rule/metadata itself (e.g. to edit the series).
@@ -107,6 +109,8 @@ export const getExpandedSchedules: ToolDefinition<
   name: 'get_expanded_schedules',
   scopes: ['read:calendar'],
   description: `\
+List schedules over [lower, upper] with repeating events EXPANDED to their actual occurrence dates (server-computed) — use for "what's on my calendar today / this week". Paginated via cursor; window <= 1 year. Call describe_tool("get_expanded_schedules") for the normalized events/occurrences response shape.`,
+  docs: `\
 List schedules over a time range [lower, upper] with REPEATING EVENTS EXPANDED to their actual occurrence dates — the server computes each recurrence turn (weekday accrual, month-end skip, leap year, lunar) so you never calculate dates yourself.
 
 USE THIS (not get_schedules) whenever you need the real dates a recurring schedule falls on — e.g. "what's on my calendar today / this week / next month", "when does my weekly meeting actually happen". get_schedules returns ONLY raw origin rules and does NOT expand recurrences.
@@ -173,6 +177,8 @@ export const createSchedule: ToolDefinition<CreateScheduleInput, CreateScheduleO
   name: 'create_schedule',
   scopes: ['write:calendar'],
   description: `\
+Create a new schedule (calendar event) for the authenticated user. Unlike todos, 'event_time' is required. Returns the created schedule with its uuid.`,
+  docs: `\
 Create a new schedule (calendar event) for the authenticated user. Returns the created schedule with its assigned uuid.
 
 Unlike todos, schedules require an 'event_time'. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
@@ -229,6 +235,8 @@ export const updateSchedule: ToolDefinition<UpdateScheduleInput, UpdateScheduleO
   name: 'update_schedule',
   scopes: ['write:calendar'],
   description: `\
+Partially update a schedule (PATCH) — only the fields you provide are applied. Note: recurrence-rule changes apply globally (past occurrences too); to change the rule only from a point onward use branch_schedule_repeating.`,
+  docs: `\
 Partially update a schedule's fields (PATCH). Returns the full updated schedule.
 
 Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
@@ -275,6 +283,8 @@ export const excludeScheduleOccurrence: ToolDefinition<
   name: 'exclude_schedule_occurrence',
   scopes: ['write:calendar'],
   description: `\
+Skip (cancel) a single occurrence of a repeating schedule; the rest of the recurrence continues. To replace the occurrence with a one-off use replace_schedule_occurrence; to change the rule going forward use branch_schedule_repeating.`,
+  docs: `\
 Skip a single occurrence of a repeating schedule, leaving the rest of the recurrence intact. Returns the updated origin schedule (with the timestamp added to its 'exclude_repeatings').
 
 Decision guide for the agent:
@@ -339,6 +349,8 @@ export const replaceScheduleOccurrence: ToolDefinition<
   name: 'replace_schedule_occurrence',
   scopes: ['write:calendar'],
   description: `\
+Replace a single occurrence of a repeating schedule with a one-off schedule (the origin recurrence continues for other slots). Returns updated_origin and new_schedule. To merely skip the slot use exclude_schedule_occurrence.`,
+  docs: `\
 Replace a single occurrence of a repeating schedule with a one-off schedule. The origin's recurrence continues for all other occurrences; only this slot is replaced. Returns both the updated origin and the new schedule.
 
 Decision guide for the agent:
@@ -403,6 +415,8 @@ export const branchScheduleRepeating: ToolDefinition<
   name: 'branch_schedule_repeating',
   scopes: ['write:calendar'],
   description: `\
+Cut a repeating schedule at 'end_time' and start a new schedule from there — past occurrences stay on the origin. Use when the recurrence rule changes from a point onward. Call describe_tool("branch_schedule_repeating") for the decision guide vs update/replace/exclude.`,
+  docs: `\
 Cut a repeating schedule at a point in time and start a new schedule from there. Past occurrences stay on the origin; from \`end_time\` the new schedule takes over. Response has 'new' (the branch schedule) and 'origin' (the capped origin).
 
 Decision guide for the agent:
@@ -460,6 +474,8 @@ export const deleteSchedule: ToolDefinition<DeleteScheduleInput, DeleteScheduleO
   name: 'delete_schedule',
   scopes: ['write:calendar'],
   description: `\
+Permanently delete a schedule including all repeating occurrences. CONFIRM-gated: first call returns a confirmToken — re-call with it to execute (see server instructions). Call describe_tool("delete_schedule") for smaller-scope alternatives (skip/replace/branch one part).`,
+  docs: `\
 Permanently delete a schedule (including all of its repeating occurrences if any). CONFIRM-gated: the first call does NOT delete — it returns a confirmToken that must be echoed back to actually execute.
 
 Two-step flow:
