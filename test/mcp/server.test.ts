@@ -100,6 +100,7 @@ describe('mcp server — tools/list', () => {
       'delete_schedule',
       'delete_tag',
       'delete_todo',
+      'describe_tool',
       'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
@@ -198,6 +199,22 @@ describe('mcp server — tools/call', () => {
 
     expect(result.isError).toBeFalsy()
     expect(result.structuredContent).toEqual(raw)
+  })
+
+  it('describe_tool — MCP 경유 full docs 반환, 모르는 이름은 NotFound', async () => {
+    const { client } = await wireServer()
+
+    const ok = await client.callTool({ name: 'describe_tool', arguments: { name: 'delete_todo' } })
+    expect(ok.isError).toBeFalsy()
+    const payload = ok.structuredContent as { docs: string; input_schema: Record<string, unknown> }
+    expect(payload.docs).toContain('confirmToken')
+    expect(payload.input_schema['type']).toBe('object')
+    // 메타툴 — openAPI 호출 없음
+    expect(openApiSpy.callCount).toBe(0)
+
+    const missing = await client.callTool({ name: 'describe_tool', arguments: { name: 'nope' } })
+    expect(missing.isError).toBe(true)
+    expect(missing._meta).toEqual({ code: 'NotFound', status: 404 })
   })
 
   it('userId 변조 시도 — auth.userId가 그대로 전달, args의 userId는 무시', async () => {

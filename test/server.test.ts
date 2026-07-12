@@ -609,6 +609,7 @@ describe('end-to-end — POST /mcp + initialize handshake', () => {
       'delete_schedule',
       'delete_tag',
       'delete_todo',
+      'describe_tool',
       'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
