@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-29개 tool 구현 (expanded occurrence 조회 2종 추가 — #69) + unit/integration 테스트 + OAuth Resource Server까지 도달. Cloud Run prod 배포 완료, npm 패키지는 npmjs.com `todocalendar-tools`로 publish (이슈 #47 — GitHub Packages에서 이전). 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
+30개 tool 구현 (expanded occurrence 조회 2종 — #69, describe_tool 메타툴 — #73) + unit/integration 테스트 + OAuth Resource Server까지 도달. Cloud Run prod 배포 완료, npm 패키지는 npmjs.com `todocalendar-tools`로 publish (이슈 #47 — GitHub Packages에서 이전). 전체 사양은 [issue #1](https://github.com/sudopark/TodoCalendar-mcp/issues/1)이 source of truth이며, 구현 결정이 충돌하면 issue를 우선한다.
 
 기간 조회 시 반복 전개가 필요하면 `get_expanded_{todos,schedules}` (occurrence 단위 응답, Functions #244 서버 전개), 원본 규칙 메타만 필요하면 기존 `get_{todos,schedules}`를 쓴다.
 
@@ -100,12 +100,14 @@ scope claim 빠지면 openAPI가 403 `InsufficientScope` 반환. forward 개념 
 
 응답 페이로드는 **openAPI raw 그대로 노출** — timestamp(Unix sec) 변환·필드 rename·필드 드롭 모두 안 함. round-trip(read → modify → write)·소비자 캐시·감사로그가 무손실로 동작해야 하므로 (`userId` 같은 redundant 필드도 보존 — 클라 파싱 영향 추적 비용 > 보존 비용).
 
-`outputSchema`는 **문서화 채널 전용**이다. `tool.execute`는 `outputSchema.parse(result)`를 호출하면 안 됨 — 런타임 검증을 끼우는 순간 unknown 필드를 drop하거나 type coerce가 일어나서 raw passthrough 약속이 깨진다. zod로 정의된 모양은 MCP가 LLM에 노출하는 description 채널일 뿐, 실제 페이로드는 fetch가 돌려준 객체를 그대로 cast해서 통과시킨다.
+`outputSchema`는 **문서화 채널 전용**이다. `tool.execute`는 `outputSchema.parse(result)`를 호출하면 안 됨 — 런타임 검증을 끼우는 순간 unknown 필드를 drop하거나 type coerce가 일어나서 raw passthrough 약속이 깨진다. zod로 정의된 모양은 LLM에 노출하는 문서일 뿐, 실제 페이로드는 fetch가 돌려준 객체를 그대로 cast해서 통과시킨다.
 
-LLM이 raw를 해석하도록 돕는 채널은 **MCP가 LLM에 보내는 schema description뿐**:
+LLM이 raw를 해석하도록 돕는 채널은 셋으로 계층화 (#73 tools/list 다이어트 — 탐색은 얇게, 딥 정보는 사용 시점에):
 
-- tool `description`: 응답 모양·timestamp 단위(Unix epoch seconds, UTC)·discriminator 규칙(예: `event_time.time_type`, `repeating.option.optionType`)
-- `inputSchema` / `outputSchema` 각 필드 `.describe()`: 단위·의미·optional 의도
+- tool `description` (tools/list): 탐색용 요약 1–3문장 — 목적 + 핵심 disambiguator만. **outputSchema는 tools/list에 싣지 않는다** (페이로드 68% 차지하던 문서 전용 채널).
+- `describe_tool({name})` 메타툴: tool별 전체 가이드 — `docs`(기존 긴 description 전문: decision guide·응답 모양·discriminator 규칙) + full `input_schema`/`output_schema` (JSON Schema, `toDocJsonSchema` 경유).
+- server `instructions` (initialize 응답, `usageInstructions` 상수): 모든 tool 공통 정책 1회 서술 — ISO 시간 입출력·`event_time.time_type`/`repeating.option.optionType` discriminator·CONFIRM 2-step. aiFrontAPI는 같은 상수를 import해 시스템 프롬프트에 포함(Functions repo 후속).
+- `inputSchema` 각 필드 `.describe()`: 단위·의미·optional 의도 (tools/list에 그대로 유지 — LLM의 호출 인자 작성에 필요).
 
 예외는 **에러**: `InvalidParameter` / `NotFound` / `InsufficientScope` 등 코드는 자연어 메시지로 보강. 단 `code`·`status`는 `ToolError`에 그대로 보존 — 호출자가 분기·재시도·로그 분류에 쓰므로 자연어 메시지는 *추가*되는 면이지 대체되는 면이 아니다. 에러는 round-trip 대상 아니므로 보강해도 무손실 깨지지 않음.
 
