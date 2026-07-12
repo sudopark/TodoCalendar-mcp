@@ -36,9 +36,11 @@ token에 필요한 scope이 박혀 있어야 함:
 
 ### Tools
 
-29개. 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
+30개 (`describe_tool` 메타툴 포함). 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
 
 기간 조회 시 반복 이벤트의 실제 발생일이 필요하면 `get_expanded_*` (서버가 occurrence 단위로 전개, Functions #244), 원본 규칙 메타만 필요하면 기존 `get_todos`/`get_schedules`를 쓴다.
+
+`tools/list`는 탐색용 요약만 싣는다 (#73 다이어트 — outputSchema 미송신, description 1–3문장). tool별 전체 사용 가이드·full I/O JSON Schema는 `describe_tool({name})`으로 온디맨드 조회하고, ISO 시간 정책·discriminator·CONFIRM 플로우 같은 공통 규칙은 initialize 응답 `instructions`에 1회 서술된다.
 
 | 도메인             | tools                                                                                                                                                                                            | CONFIRM           |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -48,8 +50,9 @@ token에 필요한 scope이 박혀 있어야 함:
 | **done todo**      | `get_done_todos` / `update_done_todo` / `revert_done_todo` / `delete_done_todo`                                                                                           | —                 |
 | **event detail**   | `get_event_details` / `set_event_detail` / `delete_event_detail`                                                                                                          | —                 |
 | **foremost event** | `get_foremost_event` / `set_foremost_event` / `clear_foremost_event`                                                                                                      | —                 |
+| **meta**           | `describe_tool`                                                                                                                                                           | —                 |
 
-상세 입출력 스키마는 `tools/list` 응답 또는 각 tool의 `description` / `inputSchema` 참고.
+상세 입출력 스키마는 `describe_tool({name})` 응답(`docs` + `input_schema` + `output_schema`) 참고.
 
 **CONFIRM 2단계** (`delete_todo` / `delete_schedule`): 첫 호출은 destructive 동작 없이 `confirmToken`만 반환, 두 번째 호출에 token echo로 실 삭제. token은 5분 TTL이고 user+tool+args에 바인딩 — 다른 사용자·다른 args에 재사용 불가.
 
