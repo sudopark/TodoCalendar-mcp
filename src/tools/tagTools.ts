@@ -49,12 +49,15 @@ const createTagOutput = eventTagSchema
 
 type CreateTagOutput = z.infer<typeof createTagOutput>
 
+// 이미 슬림해서 탐색용 요약(description)과 전체 가이드(docs)가 동일 — const로 drift 방지 (PR #74 리뷰).
+const CREATE_TAG_DESCRIPTION =
+  'Create a new event tag (category) for the authenticated user. Returns the created tag with its assigned uuid.'
+
 export const createTag: ToolDefinition<CreateTagInput, CreateTagOutput> = {
   name: 'create_tag',
   scopes: ['write:calendar'],
-  description:
-    'Create a new event tag (category) for the authenticated user. Returns the created tag with its assigned uuid.',
-  docs: 'Create a new event tag (category) for the authenticated user. Returns the created tag with its assigned uuid.',
+  description: CREATE_TAG_DESCRIPTION,
+  docs: CREATE_TAG_DESCRIPTION,
   inputSchema: createTagInput,
   outputSchema: createTagOutput,
   execute: async (auth: Auth, args: unknown): Promise<CreateTagOutput> => {
@@ -86,12 +89,14 @@ const updateTagOutput = eventTagSchema
 
 type UpdateTagOutput = z.infer<typeof updateTagOutput>
 
+const UPDATE_TAG_DESCRIPTION =
+  "Update an event tag's name and/or color. The tag's uuid stays the same. Names must be unique among the caller's tags."
+
 export const updateTag: ToolDefinition<UpdateTagInput, UpdateTagOutput> = {
   name: 'update_tag',
   scopes: ['write:calendar'],
-  description:
-    "Update an event tag's name and/or color. The tag's uuid stays the same. Names must be unique among the caller's tags.",
-  docs: "Update an event tag's name and/or color. The tag's uuid stays the same. Names must be unique among the caller's tags.",
+  description: UPDATE_TAG_DESCRIPTION,
+  docs: UPDATE_TAG_DESCRIPTION,
   inputSchema: updateTagInput,
   outputSchema: updateTagOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateTagOutput> => {
@@ -123,12 +128,14 @@ const deleteTagOutput = statusOkSchema
 
 type DeleteTagOutput = z.infer<typeof deleteTagOutput>
 
+const DELETE_TAG_DESCRIPTION =
+  "Delete an event tag belonging to the authenticated user. Returns { status: 'ok' }. Events that referenced the tag are NOT deleted — only the tag itself is removed."
+
 export const deleteTag: ToolDefinition<DeleteTagInput, DeleteTagOutput> = {
   name: 'delete_tag',
   scopes: ['write:calendar'],
-  description:
-    "Delete an event tag belonging to the authenticated user. Returns { status: 'ok' }. Events that referenced the tag are NOT deleted — only the tag itself is removed.",
-  docs: "Delete an event tag belonging to the authenticated user. Returns { status: 'ok' }. Events that referenced the tag are NOT deleted — only the tag itself is removed.",
+  description: DELETE_TAG_DESCRIPTION,
+  docs: DELETE_TAG_DESCRIPTION,
   inputSchema: deleteTagInput,
   outputSchema: deleteTagOutput,
   execute: async (auth: Auth, args: unknown): Promise<DeleteTagOutput> => {
