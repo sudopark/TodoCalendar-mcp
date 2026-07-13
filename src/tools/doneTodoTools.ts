@@ -50,6 +50,8 @@ export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput>
   name: 'get_done_todos',
   scopes: ['read:calendar'],
   description: `\
+List completed (done) todos, newest first, paginated by cursor — pass the last item's raw 'done_at' (Unix seconds, NOT ISO) as 'cursor' for the next page; fewer than 'size' items means no more pages.`,
+  docs: `\
 List / fetch / show / get completed (done / finished / closed / past) todos for the authenticated user — history of what's been checked off, ordered by completion time (newest first), paginated by cursor.
 
 Response is an array of done todos. For pagination, pass the last item's 'done_at' as 'cursor' on the next call (cursor is excluded — items strictly older than cursor are returned). When the returned array length is less than 'size', there are no more pages. All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. The \`cursor\` pagination field is the raw ts value (Unix seconds) echoed from a previous response's \`done_at\`, not an ISO string.`,
@@ -95,6 +97,8 @@ export const updateDoneTodo: ToolDefinition<UpdateDoneTodoInput, UpdateDoneTodoO
   name: 'update_done_todo',
   scopes: ['write:calendar'],
   description: `\
+Update editable fields of a completed (done) todo: name, event_time, event_tag_id. Returns the updated done todo. To bring a done todo back to the active list, use revert_done_todo instead.`,
+  docs: `\
 Update editable fields of a completed (done) todo: name, event_time, event_tag_id. Returns the updated done todo.
 
 The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside. To bring a done todo back to the active list, use revert_done_todo instead.`,
@@ -147,6 +151,8 @@ export const revertDoneTodo: ToolDefinition<RevertDoneTodoInput, RevertDoneTodoO
   name: 'revert_done_todo',
   scopes: ['write:calendar'],
   description: `\
+Revert a completed (done) todo back to the active list (deletes the done record, recreates an active todo). Use when a completion was a mistake or needs to be redone.`,
+  docs: `\
 Revert a completed (done) todo back to the active list. Returns the new active todo and any carried-over event detail.
 
 This deletes the done-todo record and creates a fresh active todo with the preserved name/event_time/event_tag_id. Use this when a completion was a mistake or needs to be redone.`,
@@ -186,6 +192,8 @@ export const deleteDoneTodo: ToolDefinition<DeleteDoneTodoInput, DeleteDoneTodoO
   name: 'delete_done_todo',
   scopes: ['write:calendar'],
   description: `\
+Permanently delete a completed (done) todo record — does NOT restore it to the active list (use revert_done_todo for that). Returns { status: 'ok' }.`,
+  docs: `\
 Permanently delete a completed (done) todo record. Returns { status: 'ok' }.
 
 This does NOT bring the todo back to the active list — for that, use revert_done_todo. Use delete_done_todo only when the record should be purged outright.`,

@@ -15,6 +15,7 @@ describe('tools registry', () => {
       'delete_schedule',
       'delete_tag',
       'delete_todo',
+      'describe_tool',
       'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
@@ -41,6 +42,10 @@ describe('tools registry', () => {
       expect(tool.name).toBe(key)
       expect(typeof tool.description).toBe('string')
       expect(tool.description.length).toBeGreaterThan(0)
+      expect(typeof tool.docs).toBe('string')
+      expect(tool.docs.length).toBeGreaterThan(0)
+      // description은 탐색용 요약 — docs(전체 가이드)보다 길 수 없다 (#73)
+      expect(tool.description.length).toBeLessThanOrEqual(tool.docs.length)
       expect(Array.isArray(tool.scopes)).toBe(true)
       expect(tool.scopes.length).toBeGreaterThan(0)
       expect(tool.inputSchema).toBeDefined()
@@ -49,9 +54,10 @@ describe('tools registry', () => {
     }
   })
 
-  it('scope 매핑 — get_* tool은 read:calendar, 나머지는 write:calendar', () => {
+  it('scope 매핑 — get_*와 describe_tool(메타, 무변이)은 read:calendar, 나머지는 write:calendar', () => {
     for (const [key, tool] of Object.entries(tools)) {
-      const expected = key.startsWith('get_') ? 'read:calendar' : 'write:calendar'
+      const expected =
+        key === 'describe_tool' || key.startsWith('get_') ? 'read:calendar' : 'write:calendar'
       expect(tool.scopes).toEqual([expected])
     }
   })

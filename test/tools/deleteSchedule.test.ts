@@ -258,11 +258,11 @@ describe('delete_schedule — metadata', () => {
     expect(deleteSchedule.description).toMatch(/confirmToken|two-step|confirm/i)
   })
 
-  it('description은 반복 schedule의 단일 occurrence 삭제는 exclude_schedule_occurrence를 쓰라고 안내 (전체 삭제와 구분)', () => {
-    expect(deleteSchedule.description).toMatch(/exclude_schedule_occurrence/i)
+  it('docs는 반복 schedule의 단일 occurrence 삭제는 exclude_schedule_occurrence를 쓰라고 안내 (#73 — 딥 가이드는 docs 채널)', () => {
+    expect(deleteSchedule.docs).toMatch(/exclude_schedule_occurrence/i)
   })
 
-  it('description은 recurrence 규칙 자체 변경 케이스는 branch_schedule_repeating을 쓰라고 안내', () => {
-    expect(deleteSchedule.description).toMatch(/branch_schedule_repeating/i)
+  it('docs는 recurrence 규칙 자체 변경 케이스는 branch_schedule_repeating을 쓰라고 안내', () => {
+    expect(deleteSchedule.docs).toMatch(/branch_schedule_repeating/i)
   })
 })

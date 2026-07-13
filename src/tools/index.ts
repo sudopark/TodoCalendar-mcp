@@ -1,3 +1,4 @@
+import { createDescribeTool } from './describeTool.js'
 import { deleteDoneTodo, getDoneTodos, revertDoneTodo, updateDoneTodo } from './doneTodoTools.js'
 import { deleteEventDetail, getEventDetails, setEventDetail } from './eventDetailTools.js'
 import {
@@ -30,6 +31,7 @@ import {
 export type { ToolDefinition, AnyToolDefinition } from './shared/tool.js'
 export type { Auth } from '../auth/types.js'
 export { ToolError } from './shared/errors.js'
+export { usageInstructions } from './instructions.js'
 
 const buildRegistry = (
   defs: readonly AnyToolDefinition[],
@@ -44,6 +46,9 @@ const buildRegistry = (
   return Object.freeze(map)
 }
 
+// registry 완성 후에야 조회 가능해야 하므로 lazy getter — execute 시점에 resolve (#73).
+const describeTool = createDescribeTool(() => tools)
+
 export const tools = buildRegistry([
   branchScheduleRepeating as AnyToolDefinition,
   clearForemostEvent as AnyToolDefinition,
@@ -56,6 +61,7 @@ export const tools = buildRegistry([
   deleteSchedule as AnyToolDefinition,
   deleteTag as AnyToolDefinition,
   deleteTodo as AnyToolDefinition,
+  describeTool as AnyToolDefinition,
   excludeScheduleOccurrence as AnyToolDefinition,
   getDoneTodos as AnyToolDefinition,
   getEventDetails as AnyToolDefinition,

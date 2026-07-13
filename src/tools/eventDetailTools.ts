@@ -31,6 +31,8 @@ export const getEventDetails: ToolDefinition<GetEventDetailsInput, GetEventDetai
   name: 'get_event_details',
   scopes: ['read:calendar'],
   description: `\
+Fetch extra detail metadata (place, url, memo) for a specific event. Set 'is_done' by source list: get_todos/get_schedules → false, get_done_todos → true.`,
+  docs: `\
 Fetch / get / show extra detail metadata (place / location, url / link, memo / note) for a specific event — call after get_todos / get_schedules / get_done_todos when the user asks for more info about a single item.
 
 The active vs done routing is governed by the 'is_done' input flag — set it based on which list the event came from (get_todos / get_schedules → false; get_done_todos → true).`,
@@ -86,6 +88,8 @@ export const setEventDetail: ToolDefinition<SetEventDetailInput, SetEventDetailO
   name: 'set_event_detail',
   scopes: ['write:calendar'],
   description: `\
+Upsert detail metadata (place, url, memo) for a specific event — omitted 'detail' fields are unset. Set 'is_done' by source list: active todos/schedules → false, done todos → true.`,
+  docs: `\
 Upsert detail metadata (place, url, memo) for a specific event.
 
 The active vs done routing is governed by the 'is_done' input flag — set it based on which list the event came from (active todos/schedules → false; done todos → true). All fields inside 'detail' are optional; this is an upsert and omitted fields are unset.`,
@@ -130,6 +134,8 @@ export const deleteEventDetail: ToolDefinition<DeleteEventDetailInput, DeleteEve
   name: 'delete_event_detail',
   scopes: ['write:calendar'],
   description: `\
+Delete only the detail metadata (place / url / memo) of an event — the parent todo/schedule/done-todo remains. Set 'is_done' by source list. Returns { status: 'ok' }.`,
+  docs: `\
 Delete the detail metadata (place / url / memo) attached to a specific event. Returns { status: 'ok' }.
 
 This removes only the detail record — the parent event (todo / schedule / done-todo) remains. To delete the parent event itself, use delete_todo / delete_schedule / delete_done_todo. If the user wants to bring a done todo back to the active list (not just clear its detail), use revert_done_todo instead — this tool only removes place/url/memo metadata.

@@ -126,8 +126,9 @@ describe('get_schedules', () => {
 
   it('metadata', () => {
     expect(getSchedules.name).toBe('get_schedules')
-    expect(getSchedules.description).toMatch(/ISO 8601/)
+    // 슬림 description에도 expanded 구분 안내는 유지 (#73), ISO 시간 정책 상세는 docs로
     expect(getSchedules.description).toMatch(/get_expanded_schedules/)
-    expect(getSchedules.description).toMatch(/does not expand|raw origin/i)
+    expect(getSchedules.description).toMatch(/NOT expanded|raw origin/i)
+    expect(getSchedules.docs).toMatch(/ISO 8601/)
   })
 })

@@ -169,8 +169,9 @@ describe('get_todos — error 자연어 wrap', () => {
 describe('get_todos — metadata', () => {
   it('name·description·schemas 노출', () => {
     expect(getTodos.name).toBe('get_todos')
-    expect(getTodos.description).toMatch(/ISO 8601/)
+    // 슬림 description에도 expanded 구분 안내는 유지 (#73), ISO 시간 정책 상세는 docs로
     expect(getTodos.description).toMatch(/get_expanded_todos/)
+    expect(getTodos.docs).toMatch(/ISO 8601/)
     expect(getTodos.inputSchema).toBeDefined()
     expect(getTodos.outputSchema).toBeDefined()
   })

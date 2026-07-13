@@ -100,6 +100,7 @@ describe('mcp server — tools/list', () => {
       'delete_schedule',
       'delete_tag',
       'delete_todo',
+      'describe_tool',
       'exclude_schedule_occurrence',
       'get_done_todos',
       'get_event_details',
@@ -131,23 +132,22 @@ describe('mcp server — tools/list', () => {
     }
   })
 
-  it('array output 가진 tool은 outputSchema 없음 (get_tags 등)', async () => {
+  it('initialize instructions — 공통 시간 정책·describe_tool 안내 노출 (#73)', async () => {
     const { client } = await wireServer()
 
-    const { tools } = await client.listTools()
-    const tags = tools.find((t) => t.name === 'get_tags')
+    const instructions = client.getInstructions()
 
-    expect(tags?.outputSchema).toBeUndefined()
+    expect(instructions).toContain('ISO 8601')
+    expect(instructions).toContain('describe_tool')
+    expect(instructions).toContain('confirmToken')
   })
 
-  it('object output 가진 tool은 outputSchema 노출 (get_event_details)', async () => {
+  it('모든 tool — outputSchema 미송신 (#73 다이어트)', async () => {
     const { client } = await wireServer()
 
     const { tools } = await client.listTools()
-    const eventDetail = tools.find((t) => t.name === 'get_event_details')
 
-    expect(eventDetail?.outputSchema).toBeDefined()
-    expect(eventDetail?.outputSchema?.type).toBe('object')
+    for (const tool of tools) expect(tool.outputSchema).toBeUndefined()
   })
 })
 
@@ -211,6 +211,22 @@ describe('mcp server — tools/call', () => {
     expect(result.structuredContent).toEqual(raw)
   })
 
+  it('describe_tool — MCP 경유 full docs 반환, 모르는 이름은 NotFound', async () => {
+    const { client } = await wireServer()
+
+    const ok = await client.callTool({ name: 'describe_tool', arguments: { name: 'delete_todo' } })
+    expect(ok.isError).toBeFalsy()
+    const payload = ok.structuredContent as { docs: string; input_schema: Record<string, unknown> }
+    expect(payload.docs).toContain('confirmToken')
+    expect(payload.input_schema['type']).toBe('object')
+    // 메타툴 — openAPI 호출 없음
+    expect(openApiSpy.callCount).toBe(0)
+
+    const missing = await client.callTool({ name: 'describe_tool', arguments: { name: 'nope' } })
+    expect(missing.isError).toBe(true)
+    expect(missing._meta).toEqual({ code: 'NotFound', status: 404 })
+  })
+
   it('userId 변조 시도 — auth.userId가 그대로 전달, args의 userId는 무시', async () => {
     const { client } = await wireServer()
 
@@ -227,6 +243,17 @@ describe('mcp server — tools/call', () => {
     const { client } = await wireServer()
 
     const result = await client.callTool({ name: 'nope', arguments: {} })
+
+    expect(result.isError).toBe(true)
+    expect(result._meta).toEqual({ code: 'UnknownTool', status: 404 })
+  })
+
+  it('상속 prototype 키(constructor) tool 호출 — UnknownTool 404 (TypeError → internal error 회귀 방지)', async () => {
+    // registry가 일반 object면 tools['constructor']가 Object 생성자를 반환해
+    // undefined 가드를 통과하고 tool.scopes.filter에서 TypeError → JSON-RPC internal error.
+    const { client } = await wireServer()
+
+    const result = await client.callTool({ name: 'constructor', arguments: {} })
 
     expect(result.isError).toBe(true)
     expect(result._meta).toEqual({ code: 'UnknownTool', status: 404 })

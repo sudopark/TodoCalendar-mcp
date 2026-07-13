@@ -10,6 +10,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import { ZodError } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { tools as defaultTools, type AnyToolDefinition } from '../tools/index.js'
+import { usageInstructions } from '../tools/instructions.js'
 import { ToolError, naturalizeToolMessage } from '../tools/shared/errors.js'
 import { AuthInvariantError } from './errors.js'
 import { buildCallToolResult, buildErrorResult } from './result.js'
@@ -60,12 +61,18 @@ export const createMcpServer = (options: CreateMcpServerOptions = {}): Server =>
   const mcpTools =
     options.tools !== undefined ? Object.values(options.tools).map(toMcpTool) : DEFAULT_MCP_TOOLS
 
-  const server = new Server(info, { capabilities: { tools: {} } })
+  // instructions: tool별 반복 보일러플레이트를 대체하는 공통 정책 1회 서술 (#73).
+  const server = new Server(info, {
+    capabilities: { tools: {} },
+    instructions: usageInstructions,
+  })
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...mcpTools] }))
 
   server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
-    const tool = tools[req.params.name]
+    // hasOwn 가드 — 'constructor' 같은 상속 키가 Object 생성자를 반환해 undefined 가드를
+    // 통과하면 tool.scopes.filter에서 TypeError → JSON-RPC internal error (PR #74 리뷰).
+    const tool = Object.hasOwn(tools, req.params.name) ? tools[req.params.name] : undefined
     if (tool === undefined) {
       return buildErrorResult(new ToolError(404, 'UnknownTool', `Unknown tool: ${req.params.name}`))
     }
