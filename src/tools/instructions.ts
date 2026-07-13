@@ -1,6 +1,8 @@
 // tools/list description 슬림화(#73)로 tool별 반복 서술을 제거한 공통 정책의 단일 서술처.
 // MCP 경로: initialize 응답 instructions로 전달. first-party(aiFrontAPI): 이 상수를
-// import해 시스템 프롬프트에 포함 (Functions repo 후속 작업).
+// import해 시스템 프롬프트에 포함 (Functions#262).
+// 릴리스 순서 주의 — aiFrontAPI는 tool description만 모델에 전달하므로, Functions#262 반영 전에
+// 0.3.0을 채택하면 슬림 description만 서빙되는 공백이 생긴다. 같은 배포로 묶을 것.
 export const usageInstructions = `\
 TodoCalendar MCP usage guide (applies to every tool):
 
