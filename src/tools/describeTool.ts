@@ -55,7 +55,10 @@ export const createDescribeTool = (
   outputSchema: describeToolOutput,
   execute: async (_auth: Auth, args: unknown): Promise<DescribeToolOutput> => {
     const { name } = describeToolInput.parse(args)
-    const def = getRegistry()[name]
+    const registry = getRegistry()
+    // hasOwn 가드 — 'constructor' 같은 상속 키가 undefined 가드를 통과해 TypeError(Internal)로
+    // 빠지지 않고 NotFound로 떨어지게 (PR #74 리뷰).
+    const def = Object.hasOwn(registry, name) ? registry[name] : undefined
     if (def === undefined) {
       throw new ToolError(
         404,

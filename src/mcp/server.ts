@@ -70,7 +70,9 @@ export const createMcpServer = (options: CreateMcpServerOptions = {}): Server =>
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...mcpTools] }))
 
   server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
-    const tool = tools[req.params.name]
+    // hasOwn 가드 — 'constructor' 같은 상속 키가 Object 생성자를 반환해 undefined 가드를
+    // 통과하면 tool.scopes.filter에서 TypeError → JSON-RPC internal error (PR #74 리뷰).
+    const tool = Object.hasOwn(tools, req.params.name) ? tools[req.params.name] : undefined
     if (tool === undefined) {
       return buildErrorResult(new ToolError(404, 'UnknownTool', `Unknown tool: ${req.params.name}`))
     }

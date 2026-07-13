@@ -43,6 +43,16 @@ describe('describe_tool', () => {
     })
   })
 
+  it('상속 prototype 키(constructor 등) — 404 NotFound (TypeError → Internal 회귀 방지)', async () => {
+    // registry가 일반 object라 상속 키가 undefined 가드를 통과하면 def.scopes에서 TypeError.
+    for (const name of ['constructor', 'toString', 'hasOwnProperty']) {
+      await expect(describeTool.execute(auth, { name })).rejects.toMatchObject({
+        status: 404,
+        code: 'NotFound',
+      })
+    }
+  })
+
   it('input_schema는 pre-transform(ISO 문자열) side — epoch number가 아님', async () => {
     const result = (await describeTool.execute(auth, { name: 'get_schedules' })) as {
       input_schema: { properties: Record<string, Record<string, unknown>> }

@@ -248,6 +248,17 @@ describe('mcp server — tools/call', () => {
     expect(result._meta).toEqual({ code: 'UnknownTool', status: 404 })
   })
 
+  it('상속 prototype 키(constructor) tool 호출 — UnknownTool 404 (TypeError → internal error 회귀 방지)', async () => {
+    // registry가 일반 object면 tools['constructor']가 Object 생성자를 반환해
+    // undefined 가드를 통과하고 tool.scopes.filter에서 TypeError → JSON-RPC internal error.
+    const { client } = await wireServer()
+
+    const result = await client.callTool({ name: 'constructor', arguments: {} })
+
+    expect(result.isError).toBe(true)
+    expect(result._meta).toEqual({ code: 'UnknownTool', status: 404 })
+  })
+
   it('zod validation 실패 — InvalidParameter(400) + 자연어 메시지, openapi 미호출', async () => {
     const { client } = await wireServer()
 
