@@ -54,11 +54,16 @@ describe('tools registry', () => {
     }
   })
 
-  it('scope 매핑 — get_*와 describe_tool(메타, 무변이)은 read:calendar, 나머지는 write:calendar', () => {
+  it('scope 매핑 — get_*와 describe_tool(메타, 무변이)은 read:calendar, 나머지는 write:calendar (set_foremost_event만 둘 다)', () => {
     for (const [key, tool] of Object.entries(tools)) {
+      // set_foremost_event만 예외 — pin 전에 대상 종류를 단건 조회로 판별하므로 read도 함께 요구한다.
       const expected =
-        key === 'describe_tool' || key.startsWith('get_') ? 'read:calendar' : 'write:calendar'
-      expect(tool.scopes).toEqual([expected])
+        key === 'describe_tool' || key.startsWith('get_')
+          ? ['read:calendar']
+          : key === 'set_foremost_event'
+            ? ['read:calendar', 'write:calendar']
+            : ['write:calendar']
+      expect(tool.scopes).toEqual(expected)
     }
   })
 

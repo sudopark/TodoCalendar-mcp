@@ -23,10 +23,7 @@ describe.skipIf(!readiness.ready)('integration: foremost happy path', () => {
     const auth = makeIntegrationAuth()
     const todo = (await createTodo.execute(auth, { name: 'foremost-todo' })) as Todo
 
-    const set = (await setForemostEvent.execute(auth, {
-      event_id: todo.uuid,
-      is_todo: true,
-    })) as ForemostEvent
+    const set = (await setForemostEvent.execute(auth, { event_id: todo.uuid })) as ForemostEvent
     expect(set.event_id).toBe(todo.uuid)
     expect(set.is_todo).toBe(true)
 
@@ -45,17 +42,30 @@ describe.skipIf(!readiness.ready)('integration: foremost happy path', () => {
       },
     })) as Schedule
 
-    await setForemostEvent.execute(auth, { event_id: schedule.uuid, is_todo: false })
+    await setForemostEvent.execute(auth, { event_id: schedule.uuid })
 
     const fetched = (await getForemostEvent.execute(auth, {})) as ForemostEvent
     expect(fetched.event_id).toBe(schedule.uuid)
     expect(fetched.is_todo).toBe(false)
   })
 
+  it('없는 event_id → NotFound, 기존 pin 유지 (dangling pin 방지)', async () => {
+    const auth = makeIntegrationAuth()
+    const todo = (await createTodo.execute(auth, { name: 'keep-this-pin' })) as Todo
+    await setForemostEvent.execute(auth, { event_id: todo.uuid })
+
+    await expect(
+      setForemostEvent.execute(auth, { event_id: 'no-such-event-1111' }),
+    ).rejects.toMatchObject({ code: 'NotFound' })
+
+    const fetched = (await getForemostEvent.execute(auth, {})) as ForemostEvent
+    expect(fetched.event_id).toBe(todo.uuid)
+  })
+
   it('clear_foremost_event → status:ok, 이후 get은 {} 반환', async () => {
     const auth = makeIntegrationAuth()
     const todo = (await createTodo.execute(auth, { name: 'to-be-cleared' })) as Todo
-    await setForemostEvent.execute(auth, { event_id: todo.uuid, is_todo: true })
+    await setForemostEvent.execute(auth, { event_id: todo.uuid })
 
     const cleared = (await clearForemostEvent.execute(auth, {})) as { status: string }
     expect(cleared.status).toBe('ok')

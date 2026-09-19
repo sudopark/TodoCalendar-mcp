@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Auth } from '../auth/types.js'
 import { callOpenApi } from '../openapi/client.js'
+import { NotFoundError } from '../openapi/errors.js'
 import { wrapOpenApiError } from './shared/errors.js'
 import { foremostEventSchema, statusOkSchema } from './shared/schemas.js'
 import { augmentIso } from './shared/time.js'
@@ -46,12 +47,7 @@ const setForemostEventInput = z
       .string()
       .min(1)
       .describe(
-        'UUID of the todo or schedule to pin as foremost. Must belong to the authenticated user. Empty string is rejected.',
-      ),
-    is_todo: z
-      .boolean()
-      .describe(
-        'true → event_id refers to a todo (came from get_todos); false → schedule (came from get_schedules). The openAPI does not auto-detect.',
+        'UUID of the todo or schedule to pin as foremost — either kind can be pinned. Must belong to the authenticated user. Empty string is rejected.',
       ),
   })
   .describe(
@@ -64,22 +60,44 @@ const setForemostEventOutput = foremostEventSchema
 
 type SetForemostEventOutput = z.infer<typeof setForemostEventOutput>
 
+const isTodoEvent = async (auth: Auth, eventId: string): Promise<boolean> => {
+  const id = encodeURIComponent(eventId)
+  try {
+    await callOpenApi(auth, 'GET', `/v2/open/todos/${id}`)
+    return true
+  } catch (e) {
+    if (!(e instanceof NotFoundError)) throw e
+  }
+  try {
+    await callOpenApi(auth, 'GET', `/v2/open/schedules/${id}`)
+    return false
+  } catch (e) {
+    if (!(e instanceof NotFoundError)) throw e
+    throw new NotFoundError(`no todo or schedule with event_id ${eventId}`)
+  }
+}
+
 export const setForemostEvent: ToolDefinition<SetForemostEventInput, SetForemostEventOutput> = {
   name: 'set_foremost_event',
-  scopes: ['write:calendar'],
+  // 종류 판별을 위해 todo/schedule 단건 조회를 먼저 하므로 read도 필요하다.
+  scopes: ['read:calendar', 'write:calendar'],
   description: `\
-Pin a todo or schedule as the user's "foremost" event — replaces any previous pin (upsert). Set 'is_todo' by source list: get_todos → true, get_schedules → false.`,
+Pin a todo or schedule as the user's "foremost" event — replaces any previous pin (upsert). Pass only event_id; whether it is a todo or a schedule is detected automatically.`,
   docs: `\
 Pin a todo or schedule as the user's "foremost" event — replaces any previous pin (upsert). Returns the new foremost pointer { event_id, is_todo, event } with the target embedded; the embedded 'event' carries the same '*_iso' siblings as the source todo/schedule.
 
-Set 'is_todo' based on which list event_id came from (get_todos → true; get_schedules → false). The openAPI does not auto-detect the kind.`,
+Either a todo or a schedule can be pinned — the user may say "pin this schedule as my most important todo"; just pass the event's id. The tool looks the id up and sets the kind itself, so 'is_todo' is not an input. Fails with NotFound (and pins nothing) when event_id is neither a todo nor a schedule of the user.`,
   inputSchema: setForemostEventInput,
   outputSchema: setForemostEventOutput,
   execute: async (auth: Auth, args: unknown): Promise<SetForemostEventOutput> => {
-    const body = setForemostEventInput.parse(args)
+    const { event_id } = setForemostEventInput.parse(args)
     try {
+      const is_todo = await isTodoEvent(auth, event_id)
       return augmentIso(
-        await callOpenApi<SetForemostEventOutput>(auth, 'PUT', FOREMOST_PATH, body),
+        await callOpenApi<SetForemostEventOutput>(auth, 'PUT', FOREMOST_PATH, {
+          event_id,
+          is_todo,
+        }),
       ) as SetForemostEventOutput
     } catch (e) {
       return wrapOpenApiError(e)
