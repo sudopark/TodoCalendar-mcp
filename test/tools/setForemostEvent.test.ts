@@ -2,35 +2,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Auth } from '../../src/auth/types.js'
 import { InvalidParameterError, NotFoundError } from '../../src/openapi/errors.js'
 
-interface OpenApiSpy {
-  lastAuth: Auth | null
-  lastMethod: string | null
-  lastPath: string | null
-  lastBody: unknown
-  callCount: number
-  responsePayload: unknown
-  responseError: Error | null
+interface OpenApiCall {
+  auth: Auth
+  method: string
+  path: string
+  body: unknown
 }
 
-const openApiSpy: OpenApiSpy = {
-  lastAuth: null,
-  lastMethod: null,
-  lastPath: null,
-  lastBody: undefined,
-  callCount: 0,
-  responsePayload: null,
-  responseError: null,
+interface OpenApiSpy {
+  calls: OpenApiCall[]
+  responses: Record<string, unknown>
+  errors: Record<string, Error>
 }
+
+const openApiSpy: OpenApiSpy = { calls: [], responses: {}, errors: {} }
 
 vi.mock('../../src/openapi/client.js', () => ({
   callOpenApi: async (auth: Auth, method: string, path: string, body?: unknown) => {
-    openApiSpy.lastAuth = auth
-    openApiSpy.lastMethod = method
-    openApiSpy.lastPath = path
-    openApiSpy.lastBody = body
-    openApiSpy.callCount++
-    if (openApiSpy.responseError) throw openApiSpy.responseError
-    return openApiSpy.responsePayload
+    openApiSpy.calls.push({ auth, method, path, body })
+    const key = `${method} ${path}`
+    const error = openApiSpy.errors[key]
+    if (error) throw error
+    return openApiSpy.responses[key]
   },
 }))
 
@@ -38,40 +31,99 @@ const { setForemostEvent } = await import('../../src/tools/foremostEventTools.js
 
 const auth: Auth = { userId: 'u-1', scopes: ['read:calendar', 'write:calendar'] }
 
+const PUT_FOREMOST = 'PUT /v2/open/foremost/event'
+
+const lastPut = (): OpenApiCall | undefined =>
+  openApiSpy.calls.filter((c) => c.method === 'PUT').at(-1)
+
+const givenTodo = (id: string) => {
+  openApiSpy.responses[`GET /v2/open/todos/${id}`] = { uuid: id }
+}
+
+const givenSchedule = (id: string) => {
+  openApiSpy.errors[`GET /v2/open/todos/${id}`] = new NotFoundError('Todo not found')
+  openApiSpy.responses[`GET /v2/open/schedules/${id}`] = { uuid: id }
+}
+
+const givenNeither = (id: string) => {
+  openApiSpy.errors[`GET /v2/open/todos/${id}`] = new NotFoundError('Todo not found')
+  openApiSpy.errors[`GET /v2/open/schedules/${id}`] = new NotFoundError('Schedule not found')
+}
+
 beforeEach(() => {
-  openApiSpy.lastAuth = null
-  openApiSpy.lastMethod = null
-  openApiSpy.lastPath = null
-  openApiSpy.lastBody = undefined
-  openApiSpy.callCount = 0
-  openApiSpy.responseError = null
-  openApiSpy.responsePayload = {
-    event_id: 'evt-1',
-    is_todo: true,
-    event: { uuid: 'evt-1', userId: 'u-1', name: 'x', is_current: false, create_timestamp: 0 },
+  openApiSpy.calls = []
+  openApiSpy.errors = {}
+  openApiSpy.responses = {
+    [PUT_FOREMOST]: {
+      event_id: 'evt-1',
+      is_todo: true,
+      event: { uuid: 'evt-1', userId: 'u-1', name: 'x', is_current: false, create_timestamp: 0 },
+    },
   }
 })
 
-describe('set_foremost_event — happy path', () => {
-  it('PUT /v2/open/foremost/event body {event_id, is_todo}', async () => {
-    await setForemostEvent.execute(auth, { event_id: 'evt-1', is_todo: true })
+describe('set_foremost_event — kind detection', () => {
+  it('todo id → is_todo=true로 PUT', async () => {
+    givenTodo('t-1')
 
-    expect(openApiSpy.callCount).toBe(1)
-    expect(openApiSpy.lastAuth).toBe(auth)
-    expect(openApiSpy.lastMethod).toBe('PUT')
-    expect(openApiSpy.lastPath).toBe('/v2/open/foremost/event')
-    expect(openApiSpy.lastBody).toEqual({ event_id: 'evt-1', is_todo: true })
+    await setForemostEvent.execute(auth, { event_id: 't-1' })
+
+    const put = lastPut()
+    expect(put?.auth).toBe(auth)
+    expect(put?.path).toBe('/v2/open/foremost/event')
+    expect(put?.body).toEqual({ event_id: 't-1', is_todo: true })
   })
 
-  it('schedule(is_todo=false)도 동일 path — discriminator만 body로 전달', async () => {
-    await setForemostEvent.execute(auth, { event_id: 's-1', is_todo: false })
+  it('schedule id → is_todo=false로 PUT', async () => {
+    givenSchedule('s-1')
 
-    expect(openApiSpy.lastPath).toBe('/v2/open/foremost/event')
-    expect(openApiSpy.lastBody).toEqual({ event_id: 's-1', is_todo: false })
+    await setForemostEvent.execute(auth, { event_id: 's-1' })
+
+    expect(lastPut()?.body).toEqual({ event_id: 's-1', is_todo: false })
   })
 
+  it('호출자가 틀린 is_todo를 넘겨도 무시하고 판별값 사용', async () => {
+    givenSchedule('s-1')
+
+    await setForemostEvent.execute(auth, { event_id: 's-1', is_todo: true })
+
+    expect(lastPut()?.body).toEqual({ event_id: 's-1', is_todo: false })
+  })
+
+  it('todo·schedule 둘 다 없음 → NotFound, PUT 안 함 (dangling pin 방지)', async () => {
+    givenNeither('ghost')
+
+    await expect(setForemostEvent.execute(auth, { event_id: 'ghost' })).rejects.toMatchObject({
+      name: 'ToolError',
+      status: 404,
+      code: 'NotFound',
+      message: expect.stringMatching(/no todo or schedule with event_id ghost/),
+    })
+    expect(lastPut()).toBeUndefined()
+  })
+
+  it('판별 조회가 NotFound 외 에러 → 그대로 전파, PUT 안 함', async () => {
+    openApiSpy.errors['GET /v2/open/todos/t-1'] = new InvalidParameterError('bad id')
+
+    await expect(setForemostEvent.execute(auth, { event_id: 't-1' })).rejects.toThrow(
+      /The request parameters are invalid\. \(bad id\)/,
+    )
+    expect(lastPut()).toBeUndefined()
+  })
+
+  it('event_id는 path에 URL 인코딩', async () => {
+    givenTodo('a%2Fb')
+
+    await setForemostEvent.execute(auth, { event_id: 'a/b' })
+
+    expect(openApiSpy.calls[0]?.path).toBe('/v2/open/todos/a%2Fb')
+  })
+})
+
+describe('set_foremost_event — response', () => {
   it('embedded event(todo)의 create_timestamp / event_time에 *_iso 추가', async () => {
-    openApiSpy.responsePayload = {
+    givenTodo('t-1')
+    openApiSpy.responses[PUT_FOREMOST] = {
       event_id: 't-1',
       is_todo: true,
       event: {
@@ -84,10 +136,10 @@ describe('set_foremost_event — happy path', () => {
       },
     }
 
-    const result = (await setForemostEvent.execute(auth, {
-      event_id: 't-1',
-      is_todo: true,
-    })) as Record<string, unknown>
+    const result = (await setForemostEvent.execute(auth, { event_id: 't-1' })) as Record<
+      string,
+      unknown
+    >
 
     const event = result.event as Record<string, unknown>
     expect(event.create_timestamp).toBe(1700000000)
@@ -98,17 +150,18 @@ describe('set_foremost_event — happy path', () => {
   })
 
   it('raw passthrough — unknown 필드 보존', async () => {
-    openApiSpy.responsePayload = {
+    givenTodo('evt-1')
+    openApiSpy.responses[PUT_FOREMOST] = {
       event_id: 'evt-1',
       is_todo: true,
       event: { uuid: 'evt-1', userId: 'u-1', name: 'x', is_current: false, create_timestamp: 0 },
       extra_unknown_field: 'kept',
     }
 
-    const result = (await setForemostEvent.execute(auth, {
-      event_id: 'evt-1',
-      is_todo: true,
-    })) as Record<string, unknown>
+    const result = (await setForemostEvent.execute(auth, { event_id: 'evt-1' })) as Record<
+      string,
+      unknown
+    >
 
     expect(result.extra_unknown_field).toBe('kept')
   })
@@ -116,56 +169,42 @@ describe('set_foremost_event — happy path', () => {
 
 describe('set_foremost_event — input validation', () => {
   it('event_id 누락 — zod throw, 백엔드 호출 X', async () => {
-    await expect(setForemostEvent.execute(auth, { is_todo: true })).rejects.toThrow()
-    expect(openApiSpy.callCount).toBe(0)
+    await expect(setForemostEvent.execute(auth, {})).rejects.toThrow()
+    expect(openApiSpy.calls).toHaveLength(0)
   })
 
   it('event_id 빈 문자열 — zod throw', async () => {
-    await expect(
-      setForemostEvent.execute(auth, { event_id: '', is_todo: true }),
-    ).rejects.toThrow()
-    expect(openApiSpy.callCount).toBe(0)
-  })
-
-  it('is_todo 누락 — zod throw', async () => {
-    await expect(setForemostEvent.execute(auth, { event_id: 'evt-1' })).rejects.toThrow()
-    expect(openApiSpy.callCount).toBe(0)
-  })
-
-  it('is_todo가 boolean 아님(문자열) — zod throw (openAPI string 관용 파싱 제거 반영)', async () => {
-    await expect(
-      setForemostEvent.execute(auth, { event_id: 'evt-1', is_todo: 'true' }),
-    ).rejects.toThrow()
-    expect(openApiSpy.callCount).toBe(0)
+    await expect(setForemostEvent.execute(auth, { event_id: '' })).rejects.toThrow()
+    expect(openApiSpy.calls).toHaveLength(0)
   })
 
   it('userId 변조 시도 — body·auth에 흘러가지 않음', async () => {
-    await setForemostEvent.execute(auth, {
-      event_id: 'evt-1',
-      is_todo: true,
-      userId: 'attacker',
-    })
+    givenTodo('evt-1')
 
-    expect(openApiSpy.lastAuth).toBe(auth)
-    expect(openApiSpy.lastBody).toEqual({ event_id: 'evt-1', is_todo: true })
+    await setForemostEvent.execute(auth, { event_id: 'evt-1', userId: 'attacker' })
+
+    expect(openApiSpy.calls.every((c) => c.auth === auth)).toBe(true)
+    expect(lastPut()?.body).toEqual({ event_id: 'evt-1', is_todo: true })
   })
 })
 
 describe('set_foremost_event — error wrap', () => {
-  it('OpenApiError(NotFound) → ToolError', async () => {
-    openApiSpy.responseError = new NotFoundError('missing target')
+  it('PUT OpenApiError(NotFound) → ToolError', async () => {
+    givenTodo('t-1')
+    openApiSpy.errors[PUT_FOREMOST] = new NotFoundError('missing target')
 
-    await expect(
-      setForemostEvent.execute(auth, { event_id: 'missing', is_todo: true }),
-    ).rejects.toThrow(/The requested resource does not exist\. \(missing target\)/)
+    await expect(setForemostEvent.execute(auth, { event_id: 't-1' })).rejects.toThrow(
+      /The requested resource does not exist\. \(missing target\)/,
+    )
   })
 
-  it('OpenApiError(InvalidParameter) → ToolError', async () => {
-    openApiSpy.responseError = new InvalidParameterError('event_id missing')
+  it('PUT OpenApiError(InvalidParameter) → ToolError', async () => {
+    givenTodo('t-1')
+    openApiSpy.errors[PUT_FOREMOST] = new InvalidParameterError('event_id missing')
 
-    await expect(
-      setForemostEvent.execute(auth, { event_id: 'evt-1', is_todo: true }),
-    ).rejects.toThrow(/The request parameters are invalid\. \(event_id missing\)/)
+    await expect(setForemostEvent.execute(auth, { event_id: 't-1' })).rejects.toThrow(
+      /The request parameters are invalid\. \(event_id missing\)/,
+    )
   })
 })
 
@@ -174,7 +213,7 @@ describe('set_foremost_event — metadata', () => {
     expect(setForemostEvent.name).toBe('set_foremost_event')
     expect(typeof setForemostEvent.description).toBe('string')
     expect(setForemostEvent.description.length).toBeGreaterThan(0)
-    expect(setForemostEvent.scopes).toEqual(['write:calendar'])
+    expect(setForemostEvent.scopes).toEqual(['read:calendar', 'write:calendar'])
     expect(setForemostEvent.inputSchema).toBeDefined()
     expect(setForemostEvent.outputSchema).toBeDefined()
   })

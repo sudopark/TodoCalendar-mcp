@@ -31,6 +31,7 @@ token에 필요한 scope이 박혀 있어야 함:
 
 - `read:calendar` — `get_*` tools
 - `write:calendar` — 생성·수정·삭제 tools
+- `set_foremost_event`은 둘 다 — pin 전에 대상이 할일인지 일정인지 단건 조회로 판별한다
 
 본 server는 `GET /.well-known/oauth-protected-resource` (RFC 9728)로 AS 위치·scope 목록 공개.
 
