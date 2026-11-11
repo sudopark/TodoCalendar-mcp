@@ -10,6 +10,8 @@ import {
   eventTimeInputSchema,
   expandedEventSchema,
   isoToTsField,
+  LUNAR_CALENDAR_HINT,
+  lunarCalendarField,
   occurrenceSchema,
   repeatingInputSchema,
   todoSchema,
@@ -125,6 +127,7 @@ const getExpandedTodosInput = z
       .describe(
         'Opaque pagination cursor. Pass the previous response `next_cursor` verbatim to get the next page; omit for the first page.',
       ),
+    lunar_calendar: lunarCalendarField,
   })
   .describe(
     'Both lower and upper are required. The window `upper - lower` must be <= 1 year (server returns 400 otherwise) — split longer spans into per-year calls.',
@@ -157,7 +160,7 @@ export const getExpandedTodos: ToolDefinition<GetExpandedTodosInput, GetExpanded
   name: 'get_expanded_todos',
   scopes: ['read:calendar'],
   description: `\
-List time-bound todos over [lower, upper] with repeating todos EXPANDED to their actual occurrence dates (server-computed). Use this instead of get_todos mode="range" whenever real recurrence dates matter. Paginated via cursor; window <= 1 year. Call describe_tool("get_expanded_todos") for the normalized events/occurrences response shape and turn-advancement rules.`,
+List time-bound todos over [lower, upper] with repeating todos EXPANDED to their actual occurrence dates (server-computed). Use this instead of get_todos mode="range" whenever real recurrence dates matter. Paginated via cursor; window <= 1 year. ${LUNAR_CALENDAR_HINT} Call describe_tool("get_expanded_todos") for the normalized events/occurrences response shape and turn-advancement rules.`,
   docs: `\
 List time-bound todos over a range [lower, upper] with REPEATING TODOS EXPANDED to their actual occurrence dates — the server computes each recurrence turn (weekday accrual, month-end skip, leap year, lunar) so you never calculate dates yourself.
 
@@ -165,14 +168,17 @@ USE THIS (not get_todos mode="range") whenever you need the real dates a recurri
 
 Response is normalized: 'events' maps origin_event_id → the origin todo (metadata + repeating rule, one entry per origin); 'occurrences' is a time-ordered flat list of { origin_event_id, turn, event_time } — look up names/tags in 'events'. Paginated: pass the previous 'next_cursor' back via 'cursor' until it is null. Window must be <= 1 year. NOTE: an occurrence's 'turn' is a number, whereas complete_todo / replace_todo expect 'next_repeating_turn' as a string — stringify the turn and take the origin object from 'events' when advancing an occurrence.
 
+${LUNAR_CALENDAR_HINT} The three standards disagree on which day a lunar date lands on in some years, so a wrong guess shifts those occurrences by a day or more; leaving it out keeps the server default ('chinese') instead of asserting a standard the user never stated.
+
 All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: getExpandedTodosInput,
   outputSchema: getExpandedTodosOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetExpandedTodosOutput> => {
-    const { lower, upper, limit, cursor } = getExpandedTodosInput.parse(args)
+    const { lower, upper, limit, cursor, lunar_calendar } = getExpandedTodosInput.parse(args)
     const qs = new URLSearchParams({ lower: String(lower), upper: String(upper) })
     if (limit !== undefined) qs.set('limit', String(limit))
     if (cursor !== undefined) qs.set('cursor', cursor)
+    if (lunar_calendar !== undefined) qs.set('lunar_calendar', lunar_calendar)
     try {
       return augmentIso(
         await callOpenApi<GetExpandedTodosOutput>(
