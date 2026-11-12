@@ -167,10 +167,14 @@ export const todoSchema = z
         'Owner user id as recorded by the openAPI. Typically the authenticated caller; preserved verbatim so consumers can audit/cache the raw payload.',
       ),
     name: z.string(),
+    // openAPI는 시간이 붙은 todo 응답에서 이 필드를 생략한다. 필수로 두면 (a) 검증하는
+    // 클라이언트가 정상 응답을 거부하고, (b) complete_todo가 get_todos 페이로드를 그대로
+    // echo하는 문서화된 경로에서 400으로 막힌다.
     is_current: z
       .boolean()
+      .optional()
       .describe(
-        'True if this is a "current" (non-time-bound) todo that should always be visible until completed. Typically equivalent to `event_time` being absent, but treat this field as the source of truth — the equivalence is not guaranteed in all cases by the openAPI contract.',
+        'True if this is a "current" (non-time-bound) todo that should always be visible until completed. Absent means not current — the openAPI omits the field for time-bound todos.',
       ),
     create_timestamp: z.number().describe(TS_SEC),
     event_tag_id: z.string().nullish(),

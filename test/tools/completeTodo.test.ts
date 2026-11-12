@@ -59,6 +59,19 @@ beforeEach(() => {
 })
 
 describe('complete_todo — happy path', () => {
+  // openAPI는 시간이 붙은 todo 응답에서 is_current를 아예 생략한다 (emulator 확인:
+  // create_todo/get_todos 둘 다 누락). docs가 "get_todos 페이로드를 그대로 echo"라고
+  // 안내하므로, is_current를 필수로 두면 시간 있는 todo의 완료가 전부 400으로 막힌다.
+  it('origin에 is_current 없어도 — 그대로 openAPI로 전달', async () => {
+    const { is_current, ...originWithoutIsCurrent } = originTodo
+    void is_current
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: originWithoutIsCurrent })
+
+    expect(openApiSpy.callCount).toBe(1)
+    expect(openApiSpy.lastBody).toEqual({ origin: originWithoutIsCurrent })
+  })
+
   it('origin만 — POST /v2/open/todos/{id}/complete + body {origin}', async () => {
     await completeTodo.execute(auth, { todo_id: 't-1', origin: originTodo })
 
