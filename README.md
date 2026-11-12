@@ -9,6 +9,61 @@ AI agent가 TodoCalendar의 todo / schedule / tag 데이터를 다룰 수 있게
 
 ---
 
+## Connect from Claude
+
+*For anyone connecting the hosted server from Claude, and for directory reviewers. Everything below this section is developer documentation, in Korean.*
+
+**1. Add the connector.** In Claude, open **Settings → Connectors → Add custom connector** and enter:
+
+```
+https://mcp.todo-calendar.com/mcp
+```
+
+**2. Sign in.** Claude redirects you to the To-do Calendar sign-in page. The consent screen lists the two scopes being requested — `read:calendar` and `write:calendar`. The connector only ever acts on the account that approved it: the user identity is read from the verified access token, never from a tool argument.
+
+**3. Ask for something.** A few prompts that exercise the main paths:
+
+| Prompt | Tool |
+| --- | --- |
+| "What's on my calendar this week?" | `get_expanded_schedules` |
+| "What to-dos do I have open?" | `get_todos` |
+| "Add a to-do: buy coffee beans, tomorrow 9am" | `create_todo` |
+| "Move it to 10am" | `update_todo` |
+| "Mark it done" | `complete_todo` |
+| "Add a weekly team meeting, Mondays 10am" | `create_schedule` |
+| "Skip next Monday's team meeting" | `exclude_schedule_occurrence` |
+| "Delete the team meeting" | `delete_schedule` (two steps — see below) |
+
+**Deleting takes two steps.** `delete_todo` and `delete_schedule` do not delete on the first call. The first call changes nothing and returns a confirmation message with a token; the deletion happens only when the assistant calls again with the same arguments plus that token. Tokens expire after 5 minutes and are bound to the user, the tool and the arguments, so they cannot be replayed elsewhere.
+
+**Disconnecting.** End the connection from Claude's connector settings. The issued tokens are invalidated immediately.
+
+### What the tools cover
+
+30 tools. Repeating events are expanded on the server, so you get the dates each occurrence actually falls on — weekday accrual, month-end skips, leap years and lunar rules included.
+
+| | |
+| --- | --- |
+| **To-dos** | list, create, edit, complete, restore, replace, delete |
+| **Schedules** | list, create, edit, delete; edit or skip a single occurrence; split a repeating series |
+| **Tags** | list, create, edit, delete |
+| **Event details** | place, coordinates, address, link, memo |
+| **Pinned event** | read, set, clear |
+
+Every tool carries a `title` and the applicable `readOnlyHint` / `destructiveHint` in `tools/list`. `describe_tool({name})` returns the full guide and the input/output JSON Schemas for any tool.
+
+### Privacy
+
+[Privacy policy](https://todo-calendar.com/privacy/en) (Korean: [/privacy/ko](https://todo-calendar.com/privacy/ko)). The "Connected external apps" section covers what a connected app can reach, which tokens are stored and for how long, and how to end a connection.
+
+This server keeps no store of its own — it forwards requests to the To-do Calendar API and passes responses straight back.
+
+### Support
+
+todocalendar.help@gmail.com
+
+---
+
 ## For external AI agents
 
 ### Endpoint
@@ -105,26 +160,6 @@ const result = await tools.get_todos.execute(auth, { mode: 'current' })
 ### Export 면
 
 `todocalendar-tools/tools`만 공개. 시그니처·타입 변경은 semver major.
-
----
-
-## Connecting from Claude
-
-Claude 앱에서 **Settings → Connectors → Add custom connector**를 열고 URL에 `https://mcp.todo-calendar.com/mcp` 를 넣는다. 연결을 누르면 To-do Calendar 로그인 화면이 뜨고, 동의 화면에 요청 scope(`read:calendar` / `write:calendar`)가 표시된다. 연결은 동의한 계정 하나에만 작용한다 — 유저 식별자는 검증된 access token에서만 읽고 tool 인자로 받지 않는다.
-
-할일·일정 삭제는 2단계다. 첫 호출은 아무것도 바꾸지 않고 확인 메시지와 토큰을 돌려주며, 승인 뒤 같은 인자 + 토큰으로 재호출해야 실제로 지워진다 (토큰 5분).
-
-연결 해제는 Claude의 커넥터 설정에서 하면 되고, 해제 시 발급된 토큰이 즉시 무효화된다.
-
-## Privacy Policy
-
-[https://todo-calendar.com/privacy/en](https://todo-calendar.com/privacy/en) (한국어: [/privacy/ko](https://todo-calendar.com/privacy/ko))
-
-커넥터로 연결된 외부 앱이 어떤 범위에서 동작하는지, 어떤 토큰을 얼마나 보관하는지, 데이터가 어디로 가는지는 방침의 "Connected external apps" 절에 있다. 본 server는 자체 저장소가 없다 — 요청을 TodoCalendar API로 중계하고 응답을 그대로 돌려준다.
-
-## Support
-
-todocalendar.help@gmail.com
 
 ---
 

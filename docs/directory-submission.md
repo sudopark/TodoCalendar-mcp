@@ -29,7 +29,7 @@
 | Name | To-do Calendar | ≤100자 |
 | One-liner | Read and manage your to-dos, schedules, tags and reminders in To-do Calendar — straight from the chat. | ≤200자 |
 | Categories | Productivity / Calendar / Task management 계열에서 1–5개 (포털이 제시하는 목록이 정본) | 1–5개 |
-| Documentation URL | **미정** — 아래 "남은 결정" 참고 | |
+| Documentation URL | `https://github.com/sudopark/TodoCalendar-mcp#connect-from-claude` — 11/20 제출은 README로 간다 (PM 결정 2026-11-13) | |
 | Privacy policy URL | `https://todo-calendar.com/privacy/en` | |
 | Support contact | todocalendar.help@gmail.com | |
 | Icon | `todo-calendar.com/logo-light.png` (1024×1024 PNG) | |
@@ -127,6 +127,7 @@ todo-calendar.com. IN TXT "v=MCPv1; k=ed25519; p=<base64 공개키>"
 
 ## 남은 결정
 
-- **Documentation URL** — MCP 커넥터 연결 안내 페이지가 아직 없다. `todo-calendar.com/guide`에 한 편 추가(Terms 레포 소관)하거나, 임시로 이 레포 README를 쓴다.
-- **레지스트리 네임스페이스** — `io.github.sudopark/...`(현재 값, 즉시 가능) vs `com.todo-calendar/...`(DNS TXT 필요). 영구.
-- **테스트 계정** — 반복 일정·완료 할일이 채워진 계정을 만들고 자격증명을 포털에 입력.
+- **레지스트리 네임스페이스** — `io.github.sudopark/...`(현재 값, 즉시 가능) vs `com.todo-calendar/...`(DNS TXT 필요). 영구. **확정 전 publish 금지.**
+- **테스트 계정** — 사용자가 계정을 만들면 tool로 반복 일정·완료 할일을 채운다. 자격증명은 포털 폼에만 입력.
+
+Documentation URL은 정해졌다 — 11/20 제출은 README `#connect-from-claude` 로 간다. `todo-calendar.com` 안내 페이지(직접 설치 버튼 포함)는 출시 전 따로 만들고 승인 뒤 리스팅 URL을 갈아끼운다.
