@@ -108,6 +108,26 @@ const result = await tools.get_todos.execute(auth, { mode: 'current' })
 
 ---
 
+## Connecting from Claude
+
+Claude 앱에서 **Settings → Connectors → Add custom connector**를 열고 URL에 `https://mcp.todo-calendar.com/mcp` 를 넣는다. 연결을 누르면 To-do Calendar 로그인 화면이 뜨고, 동의 화면에 요청 scope(`read:calendar` / `write:calendar`)가 표시된다. 연결은 동의한 계정 하나에만 작용한다 — 유저 식별자는 검증된 access token에서만 읽고 tool 인자로 받지 않는다.
+
+할일·일정 삭제는 2단계다. 첫 호출은 아무것도 바꾸지 않고 확인 메시지와 토큰을 돌려주며, 승인 뒤 같은 인자 + 토큰으로 재호출해야 실제로 지워진다 (토큰 5분).
+
+연결 해제는 Claude의 커넥터 설정에서 하면 되고, 해제 시 발급된 토큰이 즉시 무효화된다.
+
+## Privacy Policy
+
+[https://todo-calendar.com/privacy/en](https://todo-calendar.com/privacy/en) (한국어: [/privacy/ko](https://todo-calendar.com/privacy/ko))
+
+커넥터로 연결된 외부 앱이 어떤 범위에서 동작하는지, 어떤 토큰을 얼마나 보관하는지, 데이터가 어디로 가는지는 방침의 "Connected external apps" 절에 있다. 본 server는 자체 저장소가 없다 — 요청을 TodoCalendar API로 중계하고 응답을 그대로 돌려준다.
+
+## Support
+
+todocalendar.help@gmail.com
+
+---
+
 ## License
 
 MIT.
