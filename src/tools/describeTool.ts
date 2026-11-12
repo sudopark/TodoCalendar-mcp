@@ -49,6 +49,7 @@ export const createDescribeTool = (
 ): ToolDefinition<DescribeToolInput, DescribeToolOutput> => ({
   name: 'describe_tool',
   scopes: ['read:calendar'],
+  annotations: { title: 'Describe a tool', readOnlyHint: true },
   description: DESCRIPTION,
   docs: DESCRIPTION,
   inputSchema: describeToolInput,

@@ -49,6 +49,7 @@ type GetDoneTodosOutput = z.infer<typeof getDoneTodosOutput>
 export const getDoneTodos: ToolDefinition<GetDoneTodosInput, GetDoneTodosOutput> = {
   name: 'get_done_todos',
   scopes: ['read:calendar'],
+  annotations: { title: 'List completed todos', readOnlyHint: true },
   description: `\
 List completed (done) todos, newest first, paginated by cursor — pass the last item's raw 'done_at' (Unix seconds, NOT ISO) as 'cursor' for the next page; fewer than 'size' items means no more pages.`,
   docs: `\
@@ -96,6 +97,7 @@ type UpdateDoneTodoOutput = z.infer<typeof updateDoneTodoOutput>
 export const updateDoneTodo: ToolDefinition<UpdateDoneTodoInput, UpdateDoneTodoOutput> = {
   name: 'update_done_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Update completed todo', readOnlyHint: false, destructiveHint: false },
   description: `\
 Update editable fields of a completed (done) todo: name, event_time, event_tag_id. Returns the updated done todo. To bring a done todo back to the active list, use revert_done_todo instead.`,
   docs: `\
@@ -150,6 +152,7 @@ type RevertDoneTodoOutput = z.infer<typeof revertDoneTodoOutput>
 export const revertDoneTodo: ToolDefinition<RevertDoneTodoInput, RevertDoneTodoOutput> = {
   name: 'revert_done_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Restore completed todo', readOnlyHint: false, destructiveHint: false },
   description: `\
 Revert a completed (done) todo back to the active list (deletes the done record, recreates an active todo). Use when a completion was a mistake or needs to be redone.`,
   docs: `\
@@ -191,6 +194,7 @@ type DeleteDoneTodoOutput = z.infer<typeof deleteDoneTodoOutput>
 export const deleteDoneTodo: ToolDefinition<DeleteDoneTodoInput, DeleteDoneTodoOutput> = {
   name: 'delete_done_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Delete completed todo', readOnlyHint: false, destructiveHint: true },
   description: `\
 Permanently delete a completed (done) todo record — does NOT restore it to the active list (use revert_done_todo for that). Returns { status: 'ok' }.`,
   docs: `\

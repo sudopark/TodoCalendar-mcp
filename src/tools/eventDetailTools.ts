@@ -30,6 +30,7 @@ type GetEventDetailsOutput = z.infer<typeof getEventDetailsOutput>
 export const getEventDetails: ToolDefinition<GetEventDetailsInput, GetEventDetailsOutput> = {
   name: 'get_event_details',
   scopes: ['read:calendar'],
+  annotations: { title: 'Get event details', readOnlyHint: true },
   description: `\
 Fetch extra detail metadata (place, url, memo) for a specific event. Set 'is_done' by source list: get_todos/get_schedules → false, get_done_todos → true.`,
   docs: `\
@@ -87,6 +88,7 @@ type SetEventDetailOutput = z.infer<typeof setEventDetailOutput>
 export const setEventDetail: ToolDefinition<SetEventDetailInput, SetEventDetailOutput> = {
   name: 'set_event_detail',
   scopes: ['write:calendar'],
+  annotations: { title: 'Set event details', readOnlyHint: false, destructiveHint: false },
   description: `\
 Upsert detail metadata (place, url, memo) for a specific event — omitted 'detail' fields are unset. Set 'is_done' by source list: active todos/schedules → false, done todos → true.`,
   docs: `\
@@ -133,6 +135,7 @@ type DeleteEventDetailOutput = z.infer<typeof deleteEventDetailOutput>
 export const deleteEventDetail: ToolDefinition<DeleteEventDetailInput, DeleteEventDetailOutput> = {
   name: 'delete_event_detail',
   scopes: ['write:calendar'],
+  annotations: { title: 'Delete event details', readOnlyHint: false, destructiveHint: true },
   description: `\
 Delete only the detail metadata (place / url / memo) of an event — the parent todo/schedule/done-todo remains. Set 'is_done' by source list. Returns { status: 'ok' }.`,
   docs: `\
