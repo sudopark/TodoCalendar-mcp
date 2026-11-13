@@ -8,6 +8,8 @@ import {
   eventTimeInputSchema,
   expandedEventSchema,
   isoToTsField,
+  LUNAR_CALENDAR_HINT,
+  lunarCalendarField,
   occurrenceSchema,
   repeatingInputSchema,
   scheduleSchema,
@@ -75,6 +77,7 @@ const getExpandedSchedulesInput = z
       .describe(
         'Opaque pagination cursor. Pass the previous response `next_cursor` verbatim to get the next page; omit for the first page.',
       ),
+    lunar_calendar: lunarCalendarField,
   })
   .describe(
     'Both lower and upper are required. The window `upper - lower` must be <= 1 year (server returns 400 otherwise) — split longer spans into per-year calls.',
@@ -111,7 +114,7 @@ export const getExpandedSchedules: ToolDefinition<
   scopes: ['read:calendar'],
   annotations: { title: 'List schedule occurrences', readOnlyHint: true },
   description: `\
-List schedules over [lower, upper] with repeating events EXPANDED to their actual occurrence dates (server-computed) — use for "what's on my calendar today / this week". Paginated via cursor; window <= 1 year. Call describe_tool("get_expanded_schedules") for the normalized events/occurrences response shape.`,
+List schedules over [lower, upper] with repeating events EXPANDED to their actual occurrence dates (server-computed) — use for "what's on my calendar today / this week". Paginated via cursor; window <= 1 year. ${LUNAR_CALENDAR_HINT} Call describe_tool("get_expanded_schedules") for the normalized events/occurrences response shape.`,
   docs: `\
 List schedules over a time range [lower, upper] with REPEATING EVENTS EXPANDED to their actual occurrence dates — the server computes each recurrence turn (weekday accrual, month-end skip, leap year, lunar) so you never calculate dates yourself.
 
@@ -119,14 +122,17 @@ USE THIS (not get_schedules) whenever you need the real dates a recurring schedu
 
 Response is normalized: 'events' maps origin_event_id → the origin schedule (metadata + repeating rule, one entry per origin); 'occurrences' is a time-ordered flat list of { origin_event_id, turn, event_time } — look up names/tags in 'events'. Paginated: pass the previous 'next_cursor' back via 'cursor' until it is null. Window must be <= 1 year. To advance an occurrence via replace_schedule_occurrence / exclude_schedule_occurrence, take the origin from 'events' and the occurrence's event_time.
 
+${LUNAR_CALENDAR_HINT} The three standards disagree on which day a lunar date lands on in some years, so a wrong guess shifts those occurrences by a day or more; leaving it out keeps the server default ('chinese') instead of asserting a standard the user never stated.
+
 All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: getExpandedSchedulesInput,
   outputSchema: getExpandedSchedulesOutput,
   execute: async (auth: Auth, args: unknown): Promise<GetExpandedSchedulesOutput> => {
-    const { lower, upper, limit, cursor } = getExpandedSchedulesInput.parse(args)
+    const { lower, upper, limit, cursor, lunar_calendar } = getExpandedSchedulesInput.parse(args)
     const qs = new URLSearchParams({ lower: String(lower), upper: String(upper) })
     if (limit !== undefined) qs.set('limit', String(limit))
     if (cursor !== undefined) qs.set('cursor', cursor)
+    if (lunar_calendar !== undefined) qs.set('lunar_calendar', lunar_calendar)
     try {
       return augmentIso(
         await callOpenApi<GetExpandedSchedulesOutput>(
