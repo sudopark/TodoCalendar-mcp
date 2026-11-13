@@ -12,6 +12,7 @@ import {
   isoToTsField,
   occurrenceSchema,
   repeatingInputSchema,
+  todoOriginEchoSchema,
   todoSchema,
 } from './shared/schemas.js'
 import { augmentIso } from './shared/time.js'
@@ -300,7 +301,7 @@ Only the fields you include in the body are applied — omitted fields stay as-i
 const completeTodoInput = z
   .object({
     todo_id: z.string().min(1).describe('UUID of the todo to complete.'),
-    origin: todoSchema.describe(
+    origin: todoOriginEchoSchema.describe(
       'The full origin todo object being completed. Typically the same payload returned by get_todos; pass through verbatim — the server uses it to record the completed snapshot and to handle repeating-turn bookkeeping.',
     ),
     next_event_time: eventTimeInputSchema
@@ -345,7 +346,7 @@ Mark a todo as completed. Pass 'origin' = the full todo payload from get_todos v
   docs: `\
 Mark a todo as completed. Returns the new done-todo record. For repeating todos, optionally advance to the next occurrence by passing 'next_event_time' and 'next_repeating_turn'.
 
-The 'origin' body field must be the full todo object (uuid, userId, name, etc.) — typically the payload returned by get_todos passed through verbatim. The 'origin' field is the ts-based todo payload returned by get_todos — pass it through verbatim with raw Unix-second timestamps; do NOT convert origin's event_time fields to ISO strings. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
+The 'origin' body field is the origin todo object from a previous response, passed through verbatim — either the full payload from get_todos or the normalized entry from get_expanded_todos 'events' (which omits userId / create_timestamp); both are accepted. The 'origin' field is the ts-based todo payload returned by get_todos — pass it through verbatim with raw Unix-second timestamps; do NOT convert origin's event_time fields to ISO strings. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: completeTodoInput,
   outputSchema: completeTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<CompleteTodoOutput> => {
