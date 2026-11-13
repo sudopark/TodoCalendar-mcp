@@ -91,6 +91,36 @@ describe('complete_todo — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ origin: originFromEvents })
   })
 
+  // get_todos 응답에는 augmentIso 가 붙인 *_iso 파생 필드가 함께 들어있다. docs 가 verbatim
+  // echo 를 지시하므로 LLM 은 그 모양을 그대로 넘긴다 — 그대로 전달하면 우리가 만든 표현 필드가
+  // openAPI 를 거쳐 done 레코드에 영구 기록된다. echo 는 augmentIso 의 역이어야 한다.
+  it('origin의 *_iso 파생 필드 — openAPI로 넘기지 않는다', async () => {
+    const fromGetTodos = {
+      ...originTodo,
+      create_timestamp_iso: '2023-11-14T22:13:20.000Z',
+      event_time: {
+        time_type: 'at',
+        timestamp: 1_700_086_400,
+        timestamp_iso: '2023-11-15T22:13:20.000Z',
+      },
+      repeating: {
+        start: 1_700_000_000,
+        start_iso: '2023-11-14T22:13:20.000Z',
+        option: { optionType: 'every_day', interval: 1 },
+      },
+    }
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: fromGetTodos })
+
+    expect(openApiSpy.lastBody).toEqual({
+      origin: {
+        ...originTodo,
+        event_time: { time_type: 'at', timestamp: 1_700_086_400 },
+        repeating: { start: 1_700_000_000, option: { optionType: 'every_day', interval: 1 } },
+      },
+    })
+  })
+
   // origin 은 이전 응답을 되돌리는 echo 통로다 (CLAUDE.md §6). openAPI 가 새 필드를 돌려주면
   // 그 필드가 완료 스냅샷에 그대로 기록돼야 하는데, 게이트가 unknown 키를 strip 하면 조용히 사라진다.
   it('origin의 unknown 필드 — strip 하지 않고 그대로 전달', async () => {
