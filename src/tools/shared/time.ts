@@ -66,3 +66,16 @@ export const augmentIso = (value: unknown): unknown => {
 
   return out
 }
+
+// augmentIso 의 역 — 입력으로 되돌아온 페이로드에서 *_iso 파생 필드만 재귀적으로 제거한다.
+// openAPI 스키마에 `_iso` 로 끝나는 필드는 없다(전부 raw ts). echo 통로(complete_todo.origin)가
+// 이걸 안 벗기면 우리가 만든 표현 필드가 openAPI 를 거쳐 도메인 저장소에 영구 기록된다.
+export const stripIso = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stripIso)
+  if (value === null || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([k]) => !k.endsWith('_iso'))
+      .map(([k, v]) => [k, stripIso(v)]),
+  )
+}

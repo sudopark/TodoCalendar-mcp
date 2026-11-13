@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { parseOffsetSeconds } from './time.js'
+import { parseOffsetSeconds, stripIso } from './time.js'
 
 const TS_SEC =
   'Unix epoch seconds (UTC). Convert with `new Date(value * 1000)` if a wall-clock representation is needed.'
@@ -197,7 +197,11 @@ export const todoSchema = z
 // (b) unknown 키가 strip 돼 openAPI 가 새로 내려준 필드가 완료 스냅샷에서 사라진다 (§6 위반).
 // 필드 이름·설명은 JSON Schema 에 그대로 남아 LLM 문서 채널은 유지된다. uuid 만 필수로 남긴다 —
 // get_todos·events 어느 쪽에서 가져와도 항상 있고, 빈 객체를 origin 으로 보내는 호출을 조기에 끊는다.
-export const todoOriginEchoSchema = todoSchema.partial().required({ uuid: true }).loose()
+export const todoOriginEchoSchema = todoSchema
+  .partial()
+  .required({ uuid: true })
+  .loose()
+  .transform(stripIso)
 
 export const doneTodoSchema = z
   .object({

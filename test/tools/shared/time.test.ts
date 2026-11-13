@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { augmentIso, parseOffsetSeconds, tsToLocalDate, tsToUtcIso } from '../../../src/tools/shared/time.js'
+import {
+  augmentIso,
+  parseOffsetSeconds,
+  stripIso,
+  tsToLocalDate,
+  tsToUtcIso,
+} from '../../../src/tools/shared/time.js'
 
 describe('tsToUtcIso', () => {
   it('ts(초) → UTC ISO with Z', () => {
@@ -90,5 +96,33 @@ describe('augmentIso — 기타 구조', () => {
   it('unknown 필드 보존 (raw passthrough)', () => {
     const out = augmentIso({ create_timestamp: 1_700_000_000, extra: 'kept' }) as Record<string, unknown>
     expect(out.extra).toBe('kept')
+  })
+})
+
+describe('stripIso', () => {
+  it('*_iso 로 끝나는 키만 제거 — 나머지는 중첩까지 그대로', () => {
+    const augmented = augmentIso({
+      uuid: 't-1',
+      create_timestamp: 1_700_000_000,
+      event_time: { time_type: 'at', timestamp: 1_700_086_400 },
+      repeating: { start: 1_700_000_000, option: { optionType: 'every_day', interval: 1 } },
+      exclude_repeatings: [1_700_172_800],
+    })
+
+    expect(stripIso(augmented)).toEqual({
+      uuid: 't-1',
+      create_timestamp: 1_700_000_000,
+      event_time: { time_type: 'at', timestamp: 1_700_086_400 },
+      repeating: { start: 1_700_000_000, option: { optionType: 'every_day', interval: 1 } },
+      exclude_repeatings: [1_700_172_800],
+    })
+  })
+
+  it('배열 안 객체도 재귀 처리', () => {
+    expect(stripIso([{ a: 1, a_iso: 'x' }])).toEqual([{ a: 1 }])
+  })
+
+  it('iso 필드 없으면 입력과 같은 값', () => {
+    expect(stripIso({ a: 1, b: null, c: [1, 2] })).toEqual({ a: 1, b: null, c: [1, 2] })
   })
 })
