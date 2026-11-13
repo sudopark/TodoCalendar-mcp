@@ -61,8 +61,9 @@ How your data is handled:
 - Deleting a to-do or a schedule takes two steps. The first call changes nothing and returns a
   confirmation token with a human-readable message; the assistant has to come back with that
   token for the deletion to happen. Tokens expire in 5 minutes.
-- You can end the connection at any time from the Claude connector settings, which
-  invalidates the issued tokens.
+- You can end the connection at any time from the Claude connector settings, which drops the
+  tokens Claude holds. Access tokens are short-lived (2 hours) and the refresh token can be
+  revoked at the authorization server.
 
 The connector is a thin adapter in front of the To-do Calendar API, operated by the same
 developer as the app. There is no third-party service behind it.

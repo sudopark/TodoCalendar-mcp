@@ -36,7 +36,7 @@ https://mcp.todo-calendar.com/mcp
 
 **Deleting takes two steps.** `delete_todo` and `delete_schedule` do not delete on the first call. The first call changes nothing and returns a confirmation message with a token; the deletion happens only when the assistant calls again with the same arguments plus that token. Tokens expire after 5 minutes and are bound to the user, the tool and the arguments, so they cannot be replayed elsewhere.
 
-**Disconnecting.** End the connection from Claude's connector settings. The issued tokens are invalidated immediately.
+**Disconnecting.** End the connection from Claude's connector settings, which drops the tokens it holds. Access tokens are short-lived (2 hours), and the refresh token can be revoked at the authorization server's RFC 7009 revocation endpoint.
 
 ### What the tools cover
 
@@ -47,7 +47,7 @@ https://mcp.todo-calendar.com/mcp
 | **To-dos** | list, create, edit, complete, restore, replace, delete |
 | **Schedules** | list, create, edit, delete; edit or skip a single occurrence; split a repeating series |
 | **Tags** | list, create, edit, delete |
-| **Event details** | place, coordinates, address, link, memo |
+| **Event details** | place, link, memo |
 | **Pinned event** | read, set, clear |
 
 Every tool carries a `title` and the applicable `readOnlyHint` / `destructiveHint` in `tools/list`. `describe_tool({name})` returns the full guide and the input/output JSON Schemas for any tool.
