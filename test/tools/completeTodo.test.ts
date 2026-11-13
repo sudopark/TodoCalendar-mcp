@@ -72,6 +72,35 @@ describe('complete_todo — happy path', () => {
     expect(openApiSpy.lastBody).toEqual({ origin: originWithoutIsCurrent })
   })
 
+  // get_expanded_todos 의 docs 가 "stringify the turn and take the origin object from 'events'"
+  // 라고 지시한다. 그 events 항목은 정규화돼 userId·create_timestamp 가 없고(expandedEventSchema),
+  // openAPI 는 origin 이 truthy 하면 받는다 — 우리 게이트만 거부하면 문서대로 한 호출이 막힌다.
+  it('origin이 expanded events 항목이어도 — 그대로 openAPI로 전달', async () => {
+    const originFromEvents = {
+      uuid: 't-1',
+      name: 'daily standup',
+      is_todo: true,
+      event_tag_id: null,
+      event_time: { time_type: 'at', timestamp: 1_800_000_000 },
+      repeating: { start: 1_800_000_000, option: { optionType: 'every_day', interval: 1 } },
+    }
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: originFromEvents })
+
+    expect(openApiSpy.callCount).toBe(1)
+    expect(openApiSpy.lastBody).toEqual({ origin: originFromEvents })
+  })
+
+  // origin 은 이전 응답을 되돌리는 echo 통로다 (CLAUDE.md §6). openAPI 가 새 필드를 돌려주면
+  // 그 필드가 완료 스냅샷에 그대로 기록돼야 하는데, 게이트가 unknown 키를 strip 하면 조용히 사라진다.
+  it('origin의 unknown 필드 — strip 하지 않고 그대로 전달', async () => {
+    const originWithNewField = { ...originTodo, server_added_field: { a: 1 } }
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: originWithNewField })
+
+    expect(openApiSpy.lastBody).toEqual({ origin: originWithNewField })
+  })
+
   it('origin만 — POST /v2/open/todos/{id}/complete + body {origin}', async () => {
     await completeTodo.execute(auth, { todo_id: 't-1', origin: originTodo })
 

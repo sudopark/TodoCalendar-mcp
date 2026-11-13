@@ -191,6 +191,14 @@ export const todoSchema = z
   })
   .describe('A todo item. Raw Unix-second timestamps are preserved; responses also include `create_timestamp_iso` and `event_time` / `repeating` `*_iso` siblings (see those schemas).')
 
+// complete_todo 의 'origin' 은 이전 응답을 서버로 되돌리는 echo 통로다. 구조 검증은 openAPI 몫 —
+// todoSchema 를 그대로 입력 게이트로 쓰면 (a) get_expanded_todos 의 events 항목처럼 정규화돼
+// 내려온 origin(userId·create_timestamp 없음)을 openAPI 는 받는데 우리가 먼저 거부하고,
+// (b) unknown 키가 strip 돼 openAPI 가 새로 내려준 필드가 완료 스냅샷에서 사라진다 (§6 위반).
+// 필드 이름·설명은 JSON Schema 에 그대로 남아 LLM 문서 채널은 유지된다. uuid 만 필수로 남긴다 —
+// get_todos·events 어느 쪽에서 가져와도 항상 있고, 빈 객체를 origin 으로 보내는 호출을 조기에 끊는다.
+export const todoOriginEchoSchema = todoSchema.partial().required({ uuid: true }).loose()
+
 export const doneTodoSchema = z
   .object({
     uuid: z.string().describe('Done-todo id (distinct from the original todo uuid).'),
