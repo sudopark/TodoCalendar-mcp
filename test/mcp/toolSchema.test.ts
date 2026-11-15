@@ -10,6 +10,7 @@ const stub = <I, O>(over: Partial<ToolDefinition<I, O>>): ToolDefinition<I, O> =
   scopes: ['read:calendar'],
   inputSchema: z.object({}) as z.ZodType<I>,
   outputSchema: z.object({}) as z.ZodType<O>,
+  annotations: { title: 'Stub', readOnlyHint: true },
   execute: async () => ({}) as O,
   ...over,
 })
@@ -49,6 +50,20 @@ describe('toMcpTool', () => {
 
     const tool = toMcpTool(def)
     expect(tool.outputSchema).toBeUndefined()
+  })
+
+  // 디렉토리 심사는 tools/list에 실린 annotation을 본다 (#72).
+  it('annotations 그대로 tools/list에 노출', () => {
+    const def = stub({
+      annotations: { title: 'Delete todo', readOnlyHint: false, destructiveHint: true },
+    }) as AnyToolDefinition
+
+    const tool = toMcpTool(def)
+    expect(tool.annotations).toEqual({
+      title: 'Delete todo',
+      readOnlyHint: false,
+      destructiveHint: true,
+    })
   })
 
   it('name·description 그대로 노출', () => {

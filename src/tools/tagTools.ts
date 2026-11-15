@@ -16,6 +16,7 @@ type GetTagsOutput = z.infer<typeof getTagsOutput>
 export const getTags: ToolDefinition<GetTagsInput, GetTagsOutput> = {
   name: 'get_tags',
   scopes: ['read:calendar'],
+  annotations: { title: 'List tags', readOnlyHint: true },
   description:
     'List all event tags (categories / labels) belonging to the authenticated user — call before creating or updating todos/schedules with a tag to discover available tag ids.',
   docs: 'List / fetch / show / get all event tags (categories / labels / groupings) belonging to the authenticated user — call before creating or updating todos/schedules with a tag to discover available tag ids. Tags are reusable labels assigned to todos and schedules.',
@@ -56,6 +57,7 @@ const CREATE_TAG_DESCRIPTION =
 export const createTag: ToolDefinition<CreateTagInput, CreateTagOutput> = {
   name: 'create_tag',
   scopes: ['write:calendar'],
+  annotations: { title: 'Create tag', readOnlyHint: false, destructiveHint: false },
   description: CREATE_TAG_DESCRIPTION,
   docs: CREATE_TAG_DESCRIPTION,
   inputSchema: createTagInput,
@@ -95,6 +97,7 @@ const UPDATE_TAG_DESCRIPTION =
 export const updateTag: ToolDefinition<UpdateTagInput, UpdateTagOutput> = {
   name: 'update_tag',
   scopes: ['write:calendar'],
+  annotations: { title: 'Update tag', readOnlyHint: false, destructiveHint: false },
   description: UPDATE_TAG_DESCRIPTION,
   docs: UPDATE_TAG_DESCRIPTION,
   inputSchema: updateTagInput,
@@ -134,6 +137,7 @@ const DELETE_TAG_DESCRIPTION =
 export const deleteTag: ToolDefinition<DeleteTagInput, DeleteTagOutput> = {
   name: 'delete_tag',
   scopes: ['write:calendar'],
+  annotations: { title: 'Delete tag', readOnlyHint: false, destructiveHint: true },
   description: DELETE_TAG_DESCRIPTION,
   docs: DELETE_TAG_DESCRIPTION,
   inputSchema: deleteTagInput,

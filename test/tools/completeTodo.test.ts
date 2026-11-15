@@ -59,6 +59,78 @@ beforeEach(() => {
 })
 
 describe('complete_todo — happy path', () => {
+  // openAPI는 시간이 붙은 todo 응답에서 is_current를 아예 생략한다 (emulator 확인:
+  // create_todo/get_todos 둘 다 누락). docs가 "get_todos 페이로드를 그대로 echo"라고
+  // 안내하므로, is_current를 필수로 두면 시간 있는 todo의 완료가 전부 400으로 막힌다.
+  it('origin에 is_current 없어도 — 그대로 openAPI로 전달', async () => {
+    const { is_current, ...originWithoutIsCurrent } = originTodo
+    void is_current
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: originWithoutIsCurrent })
+
+    expect(openApiSpy.callCount).toBe(1)
+    expect(openApiSpy.lastBody).toEqual({ origin: originWithoutIsCurrent })
+  })
+
+  // get_expanded_todos 의 docs 가 "stringify the turn and take the origin object from 'events'"
+  // 라고 지시한다. 그 events 항목은 정규화돼 userId·create_timestamp 가 없고(expandedEventSchema),
+  // openAPI 는 origin 이 truthy 하면 받는다 — 우리 게이트만 거부하면 문서대로 한 호출이 막힌다.
+  it('origin이 expanded events 항목이어도 — 그대로 openAPI로 전달', async () => {
+    const originFromEvents = {
+      uuid: 't-1',
+      name: 'daily standup',
+      is_todo: true,
+      event_tag_id: null,
+      event_time: { time_type: 'at', timestamp: 1_800_000_000 },
+      repeating: { start: 1_800_000_000, option: { optionType: 'every_day', interval: 1 } },
+    }
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: originFromEvents })
+
+    expect(openApiSpy.callCount).toBe(1)
+    expect(openApiSpy.lastBody).toEqual({ origin: originFromEvents })
+  })
+
+  // get_todos 응답에는 augmentIso 가 붙인 *_iso 파생 필드가 함께 들어있다. docs 가 verbatim
+  // echo 를 지시하므로 LLM 은 그 모양을 그대로 넘긴다 — 그대로 전달하면 우리가 만든 표현 필드가
+  // openAPI 를 거쳐 done 레코드에 영구 기록된다. echo 는 augmentIso 의 역이어야 한다.
+  it('origin의 *_iso 파생 필드 — openAPI로 넘기지 않는다', async () => {
+    const fromGetTodos = {
+      ...originTodo,
+      create_timestamp_iso: '2023-11-14T22:13:20.000Z',
+      event_time: {
+        time_type: 'at',
+        timestamp: 1_700_086_400,
+        timestamp_iso: '2023-11-15T22:13:20.000Z',
+      },
+      repeating: {
+        start: 1_700_000_000,
+        start_iso: '2023-11-14T22:13:20.000Z',
+        option: { optionType: 'every_day', interval: 1 },
+      },
+    }
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: fromGetTodos })
+
+    expect(openApiSpy.lastBody).toEqual({
+      origin: {
+        ...originTodo,
+        event_time: { time_type: 'at', timestamp: 1_700_086_400 },
+        repeating: { start: 1_700_000_000, option: { optionType: 'every_day', interval: 1 } },
+      },
+    })
+  })
+
+  // origin 은 이전 응답을 되돌리는 echo 통로다 (CLAUDE.md §6). openAPI 가 새 필드를 돌려주면
+  // 그 필드가 완료 스냅샷에 그대로 기록돼야 하는데, 게이트가 unknown 키를 strip 하면 조용히 사라진다.
+  it('origin의 unknown 필드 — strip 하지 않고 그대로 전달', async () => {
+    const originWithNewField = { ...originTodo, server_added_field: { a: 1 } }
+
+    await completeTodo.execute(auth, { todo_id: 't-1', origin: originWithNewField })
+
+    expect(openApiSpy.lastBody).toEqual({ origin: originWithNewField })
+  })
+
   it('origin만 — POST /v2/open/todos/{id}/complete + body {origin}', async () => {
     await completeTodo.execute(auth, { todo_id: 't-1', origin: originTodo })
 

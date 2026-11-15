@@ -9,4 +9,6 @@ export const toMcpTool = (def: AnyToolDefinition): Tool => ({
   name: def.name,
   description: def.description,
   inputSchema: toInputJsonSchema(def.inputSchema) as Tool['inputSchema'],
+  // 디렉토리 심사는 tools/list의 annotation으로 각 tool의 위험도를 판단한다 (#72).
+  annotations: { ...def.annotations },
 })

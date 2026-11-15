@@ -9,6 +9,61 @@ AI agent가 TodoCalendar의 todo / schedule / tag 데이터를 다룰 수 있게
 
 ---
 
+## Connect from Claude
+
+*For anyone connecting the hosted server from Claude, and for directory reviewers. Everything below this section is developer documentation, in Korean.*
+
+**1. Add the connector.** In Claude, open **Settings → Connectors → Add custom connector** and enter:
+
+```
+https://mcp.todo-calendar.com/mcp
+```
+
+**2. Sign in.** Claude redirects you to the To-do Calendar sign-in page. The consent screen lists the two scopes being requested — `read:calendar` and `write:calendar`. The connector only ever acts on the account that approved it: the user identity is read from the verified access token, never from a tool argument.
+
+**3. Ask for something.** A few prompts that exercise the main paths:
+
+| Prompt | Tool |
+| --- | --- |
+| "What's on my calendar this week?" | `get_expanded_schedules` |
+| "What to-dos do I have open?" | `get_todos` |
+| "Add a to-do: buy coffee beans, tomorrow 9am" | `create_todo` |
+| "Move it to 10am" | `update_todo` |
+| "Mark it done" | `complete_todo` |
+| "Add a weekly team meeting, Mondays 10am" | `create_schedule` |
+| "Skip next Monday's team meeting" | `exclude_schedule_occurrence` |
+| "Delete the team meeting" | `delete_schedule` (two steps — see below) |
+
+**Deleting takes two steps.** `delete_todo` and `delete_schedule` do not delete on the first call. The first call changes nothing and returns a confirmation message with a token; the deletion happens only when the assistant calls again with the same arguments plus that token. Tokens expire after 5 minutes and are bound to the user, the tool and the arguments, so they cannot be replayed elsewhere.
+
+**Disconnecting.** End the connection from Claude's connector settings, which drops the tokens it holds. Access tokens are short-lived (2 hours), and the refresh token can be revoked at the authorization server's RFC 7009 revocation endpoint.
+
+### What the tools cover
+
+30 tools. Repeating events are expanded on the server, so you get the dates each occurrence actually falls on — weekday accrual, month-end skips, leap years and lunar rules included.
+
+| | |
+| --- | --- |
+| **To-dos** | list, create, edit, complete, restore, replace, delete |
+| **Schedules** | list, create, edit, delete; edit or skip a single occurrence; split a repeating series |
+| **Tags** | list, create, edit, delete |
+| **Event details** | place, link, memo |
+| **Pinned event** | read, set, clear |
+
+Every tool carries a `title` and the applicable `readOnlyHint` / `destructiveHint` in `tools/list`. `describe_tool({name})` returns the full guide and the input/output JSON Schemas for any tool.
+
+### Privacy
+
+[Privacy policy](https://todo-calendar.com/privacy/en) (Korean: [/privacy/ko](https://todo-calendar.com/privacy/ko)). The "Connected external apps" section covers what a connected app can reach, which tokens are stored and for how long, and how to end a connection.
+
+This server keeps no store of its own — it forwards requests to the To-do Calendar API and passes responses straight back.
+
+### Support
+
+todocalendar.help@gmail.com
+
+---
+
 ## For external AI agents
 
 ### Endpoint

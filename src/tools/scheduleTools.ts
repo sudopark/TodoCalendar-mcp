@@ -33,6 +33,7 @@ type GetSchedulesOutput = z.infer<typeof getSchedulesOutput>
 export const getSchedules: ToolDefinition<GetSchedulesInput, GetSchedulesOutput> = {
   name: 'get_schedules',
   scopes: ['read:calendar'],
+  annotations: { title: 'List schedules', readOnlyHint: true },
   description: `\
 List schedules (calendar events) whose ORIGIN event_time overlaps [lower, upper] — raw origin rules only, recurrences NOT expanded. Use get_expanded_schedules for the actual dates recurring events fall on; use this tool to read/edit the series definition itself.`,
   docs: `\
@@ -108,6 +109,7 @@ export const getExpandedSchedules: ToolDefinition<
 > = {
   name: 'get_expanded_schedules',
   scopes: ['read:calendar'],
+  annotations: { title: 'List schedule occurrences', readOnlyHint: true },
   description: `\
 List schedules over [lower, upper] with repeating events EXPANDED to their actual occurrence dates (server-computed) — use for "what's on my calendar today / this week". Paginated via cursor; window <= 1 year. Call describe_tool("get_expanded_schedules") for the normalized events/occurrences response shape.`,
   docs: `\
@@ -176,6 +178,7 @@ type CreateScheduleOutput = z.infer<typeof createScheduleOutput>
 export const createSchedule: ToolDefinition<CreateScheduleInput, CreateScheduleOutput> = {
   name: 'create_schedule',
   scopes: ['write:calendar'],
+  annotations: { title: 'Create schedule', readOnlyHint: false, destructiveHint: false },
   description: `\
 Create a new schedule (calendar event) for the authenticated user. Unlike todos, 'event_time' is required. Returns the created schedule with its uuid.`,
   docs: `\
@@ -234,6 +237,7 @@ type UpdateScheduleOutput = z.infer<typeof updateScheduleOutput>
 export const updateSchedule: ToolDefinition<UpdateScheduleInput, UpdateScheduleOutput> = {
   name: 'update_schedule',
   scopes: ['write:calendar'],
+  annotations: { title: 'Update schedule', readOnlyHint: false, destructiveHint: false },
   description: `\
 Partially update a schedule (PATCH) — only the fields you provide are applied. Note: recurrence-rule changes apply globally (past occurrences too); to change the rule only from a point onward use branch_schedule_repeating.`,
   docs: `\
@@ -282,6 +286,7 @@ export const excludeScheduleOccurrence: ToolDefinition<
 > = {
   name: 'exclude_schedule_occurrence',
   scopes: ['write:calendar'],
+  annotations: { title: 'Skip one schedule occurrence', readOnlyHint: false, destructiveHint: true },
   description: `\
 Skip (cancel) a single occurrence of a repeating schedule; the rest of the recurrence continues. To replace the occurrence with a one-off use replace_schedule_occurrence; to change the rule going forward use branch_schedule_repeating.`,
   docs: `\
@@ -348,6 +353,7 @@ export const replaceScheduleOccurrence: ToolDefinition<
 > = {
   name: 'replace_schedule_occurrence',
   scopes: ['write:calendar'],
+  annotations: { title: 'Replace one schedule occurrence', readOnlyHint: false, destructiveHint: true },
   description: `\
 Replace a single occurrence of a repeating schedule with a one-off schedule (the origin recurrence continues for other slots). Returns updated_origin and new_schedule. To merely skip the slot use exclude_schedule_occurrence.`,
   docs: `\
@@ -414,6 +420,7 @@ export const branchScheduleRepeating: ToolDefinition<
 > = {
   name: 'branch_schedule_repeating',
   scopes: ['write:calendar'],
+  annotations: { title: 'Split repeating schedule', readOnlyHint: false, destructiveHint: true },
   description: `\
 Cut a repeating schedule at 'end_time' and start a new schedule from there — past occurrences stay on the origin. Use when the recurrence rule changes from a point onward. Call describe_tool("branch_schedule_repeating") for the decision guide vs update/replace/exclude.`,
   docs: `\
@@ -473,6 +480,7 @@ type DeleteScheduleOutput = z.infer<typeof deleteScheduleOutput>
 export const deleteSchedule: ToolDefinition<DeleteScheduleInput, DeleteScheduleOutput> = {
   name: 'delete_schedule',
   scopes: ['write:calendar'],
+  annotations: { title: 'Delete schedule', readOnlyHint: false, destructiveHint: true },
   description: `\
 Permanently delete a schedule including all repeating occurrences. CONFIRM-gated: first call returns a confirmToken — re-call with it to execute (see server instructions). Call describe_tool("delete_schedule") for smaller-scope alternatives (skip/replace/branch one part).`,
   docs: `\

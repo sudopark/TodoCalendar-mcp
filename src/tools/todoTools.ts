@@ -12,6 +12,7 @@ import {
   isoToTsField,
   occurrenceSchema,
   repeatingInputSchema,
+  todoOriginEchoSchema,
   todoSchema,
 } from './shared/schemas.js'
 import { augmentIso } from './shared/time.js'
@@ -82,6 +83,7 @@ const dispatchPath = (input: GetTodosInput): string => {
 export const getTodos: ToolDefinition<GetTodosInput, GetTodosOutput> = {
   name: 'get_todos',
   scopes: ['read:calendar'],
+  annotations: { title: 'List todos', readOnlyHint: true },
   description: `\
 List todos (tasks) via one of three modes — 'current': non-time-bound todos that stay visible until completed; 'range': todos whose ORIGIN event_time falls in [lower, upper] (raw origin rules only, NOT expanded — use get_expanded_todos for actual recurrence dates); 'uncompleted': still-open todos as of refTime (overdue lookups).`,
   docs: `\
@@ -156,6 +158,7 @@ type GetExpandedTodosOutput = z.infer<typeof getExpandedTodosOutput>
 export const getExpandedTodos: ToolDefinition<GetExpandedTodosInput, GetExpandedTodosOutput> = {
   name: 'get_expanded_todos',
   scopes: ['read:calendar'],
+  annotations: { title: 'List todo occurrences', readOnlyHint: true },
   description: `\
 List time-bound todos over [lower, upper] with repeating todos EXPANDED to their actual occurrence dates (server-computed). Use this instead of get_todos mode="range" whenever real recurrence dates matter. Paginated via cursor; window <= 1 year. Call describe_tool("get_expanded_todos") for the normalized events/occurrences response shape and turn-advancement rules.`,
   docs: `\
@@ -220,6 +223,7 @@ type CreateTodoOutput = z.infer<typeof createTodoOutput>
 export const createTodo: ToolDefinition<CreateTodoInput, CreateTodoOutput> = {
   name: 'create_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Create todo', readOnlyHint: false, destructiveHint: false },
   description: `\
 Create a new todo for the authenticated user. Omit 'event_time' to create a 'current' (non-time-bound) todo that stays visible until completed. Returns the created todo with its uuid.`,
   docs: `\
@@ -272,6 +276,7 @@ type UpdateTodoOutput = z.infer<typeof updateTodoOutput>
 export const updateTodo: ToolDefinition<UpdateTodoInput, UpdateTodoOutput> = {
   name: 'update_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Update todo', readOnlyHint: false, destructiveHint: false },
   description: `\
 Partially update a todo (PATCH) — only the fields you provide are applied. Returns the full updated todo.`,
   docs: `\
@@ -300,7 +305,7 @@ Only the fields you include in the body are applied — omitted fields stay as-i
 const completeTodoInput = z
   .object({
     todo_id: z.string().min(1).describe('UUID of the todo to complete.'),
-    origin: todoSchema.describe(
+    origin: todoOriginEchoSchema.describe(
       'The full origin todo object being completed. Typically the same payload returned by get_todos; pass through verbatim — the server uses it to record the completed snapshot and to handle repeating-turn bookkeeping.',
     ),
     next_event_time: eventTimeInputSchema
@@ -340,12 +345,13 @@ type CompleteTodoOutput = z.infer<typeof completeTodoOutput>
 export const completeTodo: ToolDefinition<CompleteTodoInput, CompleteTodoOutput> = {
   name: 'complete_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Complete todo', readOnlyHint: false, destructiveHint: false },
   description: `\
 Mark a todo as completed. Pass 'origin' = the full todo payload from get_todos verbatim (keep raw Unix-second timestamps — do NOT convert to ISO). For repeating todos, optionally advance to the next occurrence via next_event_time / next_repeating_turn — call describe_tool("complete_todo") for details.`,
   docs: `\
 Mark a todo as completed. Returns the new done-todo record. For repeating todos, optionally advance to the next occurrence by passing 'next_event_time' and 'next_repeating_turn'.
 
-The 'origin' body field must be the full todo object (uuid, userId, name, etc.) — typically the payload returned by get_todos passed through verbatim. The 'origin' field is the ts-based todo payload returned by get_todos — pass it through verbatim with raw Unix-second timestamps; do NOT convert origin's event_time fields to ISO strings. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
+The 'origin' body field is the origin todo object from a previous response, passed through verbatim — either the full payload from get_todos or the normalized entry from get_expanded_todos 'events' (which omits userId / create_timestamp); both are accepted. The 'origin' field is the ts-based todo payload returned by get_todos — pass it through verbatim with raw Unix-second timestamps; do NOT convert origin's event_time fields to ISO strings. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
   inputSchema: completeTodoInput,
   outputSchema: completeTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<CompleteTodoOutput> => {
@@ -399,6 +405,7 @@ type ReplaceTodoOutput = z.infer<typeof replaceTodoOutput>
 export const replaceTodo: ToolDefinition<ReplaceTodoInput, ReplaceTodoOutput> = {
   name: 'replace_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Replace todo', readOnlyHint: false, destructiveHint: true },
   description: `\
 Replace a repeating todo with a new one: set 'origin_next_event_time' to advance the origin past this turn, or omit it to delete the origin entirely. For non-repeating todos use update_todo instead. Call describe_tool("replace_todo") for the occurrence-vs-series decision guide.`,
   docs: `\
@@ -451,6 +458,7 @@ type DeleteTodoOutput = z.infer<typeof deleteTodoOutput>
 export const deleteTodo: ToolDefinition<DeleteTodoInput, DeleteTodoOutput> = {
   name: 'delete_todo',
   scopes: ['write:calendar'],
+  annotations: { title: 'Delete todo', readOnlyHint: false, destructiveHint: true },
   description: `\
 Permanently delete a todo — for repeating todos this removes the ENTIRE series. CONFIRM-gated: first call returns a confirmToken — re-call with it to execute (see server instructions). Call describe_tool("delete_todo") for alternatives that keep the series (replace/skip one occurrence).`,
   docs: `\

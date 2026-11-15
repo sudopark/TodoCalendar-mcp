@@ -67,6 +67,54 @@ describe('tools registry', () => {
     }
   })
 
+  // Claude Connectors 디렉토리 제출 요건 (#72) — "every tool includes a `title` and the
+  // applicable `readOnlyHint` or `destructiveHint`". 리뷰어가 이 값으로 위험도를 판단한다.
+  it('annotations — 전 tool에 사람이 읽는 title', () => {
+    for (const [key, tool] of Object.entries(tools)) {
+      expect(tool.annotations.title, key).toBeTypeOf('string')
+      expect(tool.annotations.title.length, key).toBeGreaterThan(0)
+    }
+  })
+
+  it('annotations — 조회 tool은 readOnlyHint true, 나머지는 false', () => {
+    for (const [key, tool] of Object.entries(tools)) {
+      const isRead = key === 'describe_tool' || key.startsWith('get_')
+      expect(tool.annotations.readOnlyHint, key).toBe(isRead)
+    }
+  })
+
+  // 스펙상 destructiveHint는 readOnlyHint === false일 때만 의미가 있다. 그리고 기본값이
+  // true라서 비파괴 write에도 false를 명시해야 create_*가 파괴적으로 읽히지 않는다.
+  it('annotations — destructiveHint는 write tool에만, 전원 명시', () => {
+    for (const [key, tool] of Object.entries(tools)) {
+      const isRead = key === 'describe_tool' || key.startsWith('get_')
+      if (isRead) expect(tool.annotations.destructiveHint, key).toBeUndefined()
+      else expect(tool.annotations.destructiveHint, key).toBeTypeOf('boolean')
+    }
+  })
+
+  // 대상 또는 그 회차 자체가 사라지는 변경만 파괴적으로 본다. 필드만 바뀌고 대상이 남는
+  // 변경(update_*, set_*, complete/revert)은 비파괴 — 전부 파괴로 올리면 클라이언트가
+  // 평범한 수정마다 확인을 받게 돼 신호가 죽는다.
+  it('annotations — destructiveHint true 목록', () => {
+    const destructive = Object.entries(tools)
+      .filter(([, tool]) => tool.annotations.destructiveHint === true)
+      .map(([key]) => key)
+      .sort()
+    expect(destructive).toEqual([
+      'branch_schedule_repeating',
+      'clear_foremost_event',
+      'delete_done_todo',
+      'delete_event_detail',
+      'delete_schedule',
+      'delete_tag',
+      'delete_todo',
+      'exclude_schedule_occurrence',
+      'replace_schedule_occurrence',
+      'replace_todo',
+    ])
+  })
+
   it('frozen — 런타임에 tool 추가/교체 불가', () => {
     expect(Object.isFrozen(tools)).toBe(true)
   })

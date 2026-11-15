@@ -175,4 +175,19 @@ describe('get_todos — metadata', () => {
     expect(getTodos.inputSchema).toBeDefined()
     expect(getTodos.outputSchema).toBeDefined()
   })
+
+  // 시간이 붙은 todo는 openAPI 응답에 is_current가 없다. outputSchema가 필수로 선언하면
+  // 검증하는 클라이언트(Inspector 등)가 정상 응답을 거부한다.
+  it('outputSchema가 is_current 없는 todo를 허용 — 검증 클라 회귀', () => {
+    const real = [
+      {
+        uuid: 't-1',
+        userId: 'u-1',
+        name: 'timed todo',
+        create_timestamp: 1_700_000_000,
+        event_time: { time_type: 'at', timestamp: 1_700_086_400 },
+      },
+    ]
+    expect(() => getTodos.outputSchema.parse(real)).not.toThrow()
+  })
 })
