@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.sudopark/todocalendar",
+  "name": "com.todo-calendar/todo-calendar",
   "title": "To-do Calendar",
   "description": "Read and manage To-do Calendar todos, schedules and tags from an AI agent.",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "websiteUrl": "https://todo-calendar.com",
   "repository": {
     "url": "https://github.com/sudopark/TodoCalendar-mcp",

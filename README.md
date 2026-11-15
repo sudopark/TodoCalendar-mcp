@@ -1,11 +1,11 @@
 # TodoCalendar-mcp
 
-AI agent가 TodoCalendar의 todo / schedule / tag 데이터를 다룰 수 있게 노출하는 MCP server + npm tool library.
+An MCP server and npm tool library that let AI agents work with To-do Calendar todos, schedules and tags.
 
-두 진입점, 같은 tool layer:
+Two entry points, one tool layer:
 
-- **MCP server** (Streamable HTTP) — 외부 AI Agent용 (Claude Desktop 등)
-- **`todocalendar-tools`** (npmjs.com, public) — first-party AI 호스트가 직접 import해서 사용
+- **MCP server** (Streamable HTTP) — for external AI agents (Claude Desktop and others)
+- **`todocalendar-tools`** (npmjs.com, public) — imported directly by first-party AI hosts
 
 ---
 
@@ -72,33 +72,33 @@ todocalendar.help@gmail.com
 https://mcp.todo-calendar.com/mcp
 ```
 
-Streamable HTTP transport ([MCP spec 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18) 호환).
+Streamable HTTP transport (compatible with [MCP spec 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18)).
 
 ### Auth
 
-OAuth 2.1 **Resource Server**. Authorization Server는 별 entity — TodoCalendar Functions가 호스팅. client는 그곳에서 token 발급 후:
+OAuth 2.1 **Resource Server**. The Authorization Server is a separate service hosted by TodoCalendar Functions. Clients get a token there, then send:
 
 ```
 Authorization: Bearer <RS256 JWT>
 ```
 
-token에 필요한 scope이 박혀 있어야 함:
+The token must carry the required scopes:
 
 - `read:calendar` — `get_*` tools
-- `write:calendar` — 생성·수정·삭제 tools
-- `set_foremost_event`은 둘 다 — pin 전에 대상이 할일인지 일정인지 단건 조회로 판별한다
+- `write:calendar` — create / update / delete tools
+- `set_foremost_event` needs both — it reads the target first to tell whether it is a todo or a schedule
 
-본 server는 `GET /.well-known/oauth-protected-resource` (RFC 9728)로 AS 위치·scope 목록 공개.
+The server publishes the AS location and scope list at `GET /.well-known/oauth-protected-resource` (RFC 9728).
 
 ### Tools
 
-30개 (`describe_tool` 메타툴 포함). 응답은 openAPI raw passthrough — timestamp 단위 변환 없음, 필드 rename 없음.
+30 tools, including the `describe_tool` meta tool. Responses are openAPI raw passthrough — no field renames, raw Unix-second timestamps kept, with `*_iso` siblings added alongside.
 
-기간 조회 시 반복 이벤트의 실제 발생일이 필요하면 `get_expanded_*` (서버가 occurrence 단위로 전개, Functions #244), 원본 규칙 메타만 필요하면 기존 `get_todos`/`get_schedules`를 쓴다.
+For the actual dates repeating events fall on in a range, use `get_expanded_*` (the server expands them into occurrences). For the raw recurrence rules only, use `get_todos` / `get_schedules`.
 
-`tools/list`는 탐색용 요약만 싣는다 (#73 다이어트 — outputSchema 미송신, description 1–3문장). tool별 전체 사용 가이드·full I/O JSON Schema는 `describe_tool({name})`으로 온디맨드 조회하고, ISO 시간 정책·discriminator·CONFIRM 플로우 같은 공통 규칙은 initialize 응답 `instructions`에 1회 서술된다.
+`tools/list` carries short summaries only (no outputSchema, 1–3 sentence descriptions). Each tool's full guide and complete I/O JSON Schemas come on demand from `describe_tool({name})`. Rules shared by every tool — ISO time handling, discriminators, the CONFIRM flow — are stated once in the initialize response `instructions`.
 
-| 도메인             | tools                                                                                                                                                                                            | CONFIRM           |
+| domain             | tools                                                                                                                                                                                            | CONFIRM           |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | **todo**           | `get_todos` / `get_expanded_todos` / `create_todo` / `update_todo` / `complete_todo` / `replace_todo` / `delete_todo`                                                                            | `delete_todo`     |
 | **schedule**       | `get_schedules` / `get_expanded_schedules` / `create_schedule` / `update_schedule` / `exclude_schedule_occurrence` / `replace_schedule_occurrence` / `branch_schedule_repeating` / `delete_schedule` | `delete_schedule` |
@@ -108,19 +108,19 @@ token에 필요한 scope이 박혀 있어야 함:
 | **foremost event** | `get_foremost_event` / `set_foremost_event` / `clear_foremost_event`                                                                                                      | —                 |
 | **meta**           | `describe_tool`                                                                                                                                                           | —                 |
 
-상세 입출력 스키마는 `describe_tool({name})` 응답(`docs` + `input_schema` + `output_schema`) 참고.
+For detailed input/output schemas, see the `describe_tool({name})` response (`docs` + `input_schema` + `output_schema`).
 
-**CONFIRM 2단계** (`delete_todo` / `delete_schedule`): 첫 호출은 destructive 동작 없이 `confirmToken`만 반환, 두 번째 호출에 token echo로 실 삭제. token은 5분 TTL이고 user+tool+args에 바인딩 — 다른 사용자·다른 args에 재사용 불가.
+**Two-step CONFIRM** (`delete_todo` / `delete_schedule`): the first call deletes nothing and returns only a `confirmToken`; echoing the token on a second call performs the deletion. Tokens expire in 5 minutes and are bound to user + tool + args, so they cannot be reused for another user or other arguments.
 
 ---
 
 ## For library consumers
 
-`aiFrontAPI` 같은 first-party 서버사이드 AI 호스트는 MCP transport 우회하고 tool 함수를 직접 import.
+First-party server-side AI hosts such as `aiFrontAPI` skip the MCP transport and import the tool functions directly.
 
 ### Install
 
-npmjs.com public 패키지 — 인증·`.npmrc` 설정 일체 불필요.
+Public package on npmjs.com — no auth or `.npmrc` setup needed.
 
 ```sh
 npm install todocalendar-tools
@@ -131,35 +131,35 @@ npm install todocalendar-tools
 ```ts
 import { tools, type Auth } from 'todocalendar-tools/tools'
 
-// auth context는 호출자가 만든다. 본 lib은 인증 검증 안 함.
-// Firebase Auth 등으로 token 검증 후 userId를 채워 넘김.
+// The caller builds the auth context. This library does not verify credentials:
+// verify the token (e.g. Firebase Auth) first, then pass the resulting userId.
 const auth: Auth = {
   userId: '<verified-user-id>',
   scopes: ['read:calendar', 'write:calendar'],
-  // clientId?: OAuth client_id. dev/lib 경로는 보통 undefined.
+  // clientId?: OAuth client_id. Usually undefined on the dev/lib path.
 }
 
 const result = await tools.get_todos.execute(auth, { mode: 'current' })
 ```
 
-### 호출자 책임
+### Caller responsibilities
 
-- **Auth context 검증**: `auth.userId`는 검증된 token `sub`에서만 추출. tool args 안에 userId 박아도 무시되도록 본 lib이 보장하지만, 호출자가 검증을 책임진다.
-- **Scope enforce는 transport 단에서만**: `auth.scopes`는 MCP server transport가 사용 — lib import 경로엔 enforce 효과 없음. openAPI 호출 시 항상 `read:calendar` + `write:calendar` 둘 다 박혀 나감. 호환을 위한 형식 필드.
-- **환경변수 4개 셋업** (lib 프로세스에 주입):
+- **Verify the auth context**: take `auth.userId` only from a verified token's `sub`. The library ignores any userId passed in tool args, but verifying the caller is your job.
+- **Scopes are enforced only at the transport**: the MCP server transport uses `auth.scopes`; on the library import path they have no enforcing effect. openAPI calls always carry both `read:calendar` and `write:calendar`. The field exists for shape compatibility.
+- **Set four environment variables** in the library process:
   - `OPENAPI_BASE_URL` — openAPI base URL
-  - `OPENAPI_PAT_MCP` — 서비스 인증 PAT (`mcp_<secret>` 형식)
-  - `SIGNING_SECRET` — `x-open-user-token` HS256 서명 키 (openAPI와 공유)
-  - `CONFIRM_SECRET` — confirm token HMAC 키
+  - `OPENAPI_PAT_MCP` — service auth PAT (`mcp_<secret>` format)
+  - `SIGNING_SECRET` — HS256 signing key for `x-open-user-token` (shared with openAPI)
+  - `CONFIRM_SECRET` — HMAC key for confirm tokens
 
-### 응답 / 에러 면
+### Responses and errors
 
-- **Raw passthrough**: 응답 페이로드는 openAPI 그대로. `outputSchema`는 LLM 설명 채널 — runtime parse 안 함. 추가 필드도 보존.
-- **에러**: `ToolError` 형태 — `{ status, code, message }`. `code` 카탈로그: `InvalidParameter`(400) / `NotFound`(404) / `InsufficientScope`(403) / `Timeout`(0) 등. `message`는 자연어 보강, `code`·`status`는 항상 원본.
+- **Raw passthrough**: response payloads are returned as openAPI sends them. `outputSchema` documents the shape for the LLM and is never parsed at runtime, so extra fields are preserved.
+- **Errors**: thrown as `ToolError` — `{ status, code, message }`. `code` catalog: `InvalidParameter` (400) / `NotFound` (404) / `InsufficientScope` (403) / `Timeout` (0) and others. `message` adds a natural-language explanation; `code` and `status` are always the originals.
 
-### Export 면
+### Export surface
 
-`todocalendar-tools/tools`만 공개. 시그니처·타입 변경은 semver major.
+Only `todocalendar-tools/tools` is public. Signature or type changes are a semver major.
 
 ---
 

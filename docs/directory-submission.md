@@ -109,26 +109,25 @@ Read **and** write. 대표 프롬프트는 §7 리뷰어 안내의 목록을 쓴
 
 [`server.json`](../server.json)이 레포 루트에 있다. 라이브 스키마(`2025-12-11`) 기준 필수 필드는 `name`·`description`(≤100자)·`version`이고, remote 전용 서버는 `packages` 없이 `remotes`만 둔다.
 
+이름은 도메인 네임스페이스 `com.todo-calendar/todo-calendar`다. `todo-calendar.com` apex TXT 레코드로 도메인 소유를 증명한다. 레지스트리 이름은 공개 후 바꿀 수 없다.
+
+```
+todo-calendar.com. IN TXT "v=MCPv1; k=ed25519; p=ZzFmknUfLBatPzCtqxA9m+PWPJWwv8ntaNWOibDBZjk="
+```
+
+TXT의 공개키와 짝인 Ed25519 개인키는 작업자 로컬에만 둔다 — 레포·이슈·PR 어디에도 올리지 않는다. 잃어버리면 새 키쌍을 만들어 TXT를 교체한다.
+
 ```bash
 brew install mcp-publisher
 mcp-publisher validate
-mcp-publisher login github
+mcp-publisher login dns --domain todo-calendar.com --private-key <개인키 hex>
 mcp-publisher publish
 ```
 
-`login github`은 device OAuth다. 현재 `server.json`의 이름은 `io.github.sudopark/todocalendar` — 개인 GitHub 네임스페이스라 추가 인프라가 필요 없다.
+개인키 hex는 `openssl pkey -in <key.pem> -noout -text | sed -n '/priv:/,/pub:/p' | sed '1d;$d' | tr -d ' :\n'`로 꺼낸다. 새 버전을 올릴 때는 `server.json`의 `version`을 `package.json`과 함께 올리고 같은 절차로 publish한다.
 
-도메인 네임스페이스(`com.todo-calendar/todo-calendar`)로 가려면 apex TXT 레코드와 키쌍이 필요하다.
+## 결정 사항
 
-```
-todo-calendar.com. IN TXT "v=MCPv1; k=ed25519; p=<base64 공개키>"
-```
-
-레지스트리 이름은 공개 후 바꿀 수 없다. 둘 중 하나를 publish 전에 확정해야 한다.
-
-## 남은 결정
-
-- **레지스트리 네임스페이스** — `io.github.sudopark/...`(현재 값, 즉시 가능) vs `com.todo-calendar/...`(DNS TXT 필요). 영구. **확정 전 publish 금지.**
-- **테스트 계정** — 사용자가 계정을 만들면 tool로 반복 일정·완료 할일을 채운다. 자격증명은 포털 폼에만 입력.
+- **테스트 계정** — 준비 완료. 자격증명은 포털 폼에만 입력한다.
 
 Documentation URL은 정해졌다 — 11/20 제출은 README `#connect-from-claude` 로 간다. `todo-calendar.com` 안내 페이지(직접 설치 버튼 포함)는 출시 전 따로 만들고 승인 뒤 리스팅 URL을 갈아끼운다.
