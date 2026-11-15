@@ -3,7 +3,7 @@
   "name": "io.github.sudopark/todocalendar",
   "title": "To-do Calendar",
   "description": "Read and manage To-do Calendar todos, schedules and tags from an AI agent.",
-  "version": "0.3.1",
+  "version": "1.0.0",
   "websiteUrl": "https://todo-calendar.com",
   "repository": {
     "url": "https://github.com/sudopark/TodoCalendar-mcp",
