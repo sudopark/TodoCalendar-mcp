@@ -73,6 +73,35 @@ describe('get_expanded_schedules', () => {
     expect(openApiSpy.lastPath).not.toContain('cursor')
   })
 
+  it('lunar_calendar 있으면 쿼리에 포함', async () => {
+    await getExpandedSchedules.execute(auth, {
+      lower: '2023-11-14T22:13:20Z',
+      upper: '2023-11-15T22:13:20Z',
+      lunar_calendar: 'vietnamese',
+    })
+    expect(openApiSpy.lastPath).toBe(
+      '/v2/open/schedules/expanded?lower=1700000000&upper=1700086400&lunar_calendar=vietnamese',
+    )
+  })
+
+  it('lunar_calendar 없으면 쿼리에서 생략', async () => {
+    await getExpandedSchedules.execute(auth, {
+      lower: '2023-11-14T22:13:20Z',
+      upper: '2023-11-15T22:13:20Z',
+    })
+    expect(openApiSpy.lastPath).not.toContain('lunar_calendar')
+  })
+
+  // 서버는 목록 밖 값을 400 없이 chinese로 fallback — 클라에서 enum으로 막으면 그 규칙과 어긋난다.
+  it('목록 밖 lunar_calendar 값도 거부하지 않고 그대로 전달', async () => {
+    await getExpandedSchedules.execute(auth, {
+      lower: '2023-11-14T22:13:20Z',
+      upper: '2023-11-15T22:13:20Z',
+      lunar_calendar: 'gregorian',
+    })
+    expect(openApiSpy.lastPath).toContain('lunar_calendar=gregorian')
+  })
+
   it('lower 누락 — zod throw, 백엔드 호출 안 함', async () => {
     await expect(
       getExpandedSchedules.execute(auth, { upper: '2023-11-14T22:13:20Z' }),

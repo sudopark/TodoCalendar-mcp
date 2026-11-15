@@ -74,6 +74,19 @@ const isoToTs = z.string().transform((s, ctx) => isoStringToTs(s, ctx))
 
 export const isoToTsField = isoToTs.describe(ISO_DESC)
 
+// zod enum이 아니라 optional string — 서버는 목록 밖/누락 값을 400 없이 'chinese'로 계산한다.
+// 클라에서 enum으로 막으면 그 fallback 규칙과 어긋나고, 새 기준이 추가될 때 이 패키지가 선행 배포돼야 한다.
+export const lunarCalendarField = z
+  .string()
+  .optional()
+  .describe(
+    "Lunar calendar standard used to compute lunar repeating occurrences: 'chinese' (UTC+8), 'dangi' (UTC+9, Korean), 'vietnamese' (UTC+7). Omit unless you know the end user's standard — a missing or unrecognized value is computed as 'chinese'. Affects lunar repeating rules only.",
+  )
+
+// 두 expanded tool의 description·docs가 공유 — drift 방지.
+export const LUNAR_CALENDAR_HINT =
+  "Optional 'lunar_calendar' ('chinese' | 'dangi' | 'vietnamese') selects the standard for lunar recurrences; pass it only when the end user's standard is known and leave it out otherwise — never guess."
+
 const eventTimeAtIso = z.object({ time_type: z.literal('at'), timestamp: z.string() })
 const eventTimePeriodIso = z.object({
   time_type: z.literal('period'),
