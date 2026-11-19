@@ -158,3 +158,59 @@ describe.skipIf(!readiness.ready)('integration: schedule happy path', () => {
     expect(step2.status).toBe('ok')
   })
 })
+
+const ALLDAY = {
+  time_type: 'allday' as const,
+  period_start: '2026-11-20T00:00:00+09:00',
+  period_end: '2026-11-20T23:59:59+09:00',
+}
+const invalidParameter = { status: 400, code: 'InvalidParameter' }
+
+describe.skipIf(!readiness.ready)('integration: schedule notification_options (Functions#364)', () => {
+  it('create_schedule — 종일 프리셋과 custom 이 그대로 저장돼 돌아온다', async () => {
+    const auth = makeIntegrationAuth()
+    const options = [
+      { type_text: 'allDay12AM' },
+      { type_text: 'allDay9AMBefore', before_seconds: 86400 },
+      {
+        type_text: 'custom',
+        custom_components: { year: 2026, month: 11, day: 19, hour: 20, minute: 0 },
+      },
+    ]
+
+    const created = (await createSchedule.execute(auth, {
+      name: 'notif-allday',
+      event_time: ALLDAY,
+      notification_options: options,
+    })) as Schedule
+
+    expect(created.notification_options).toEqual(options)
+  })
+
+  it('create_schedule — 종일 이벤트에 before 는 ToolError 400 InvalidParameter', async () => {
+    const auth = makeIntegrationAuth()
+    await expect(
+      createSchedule.execute(auth, {
+        name: 'notif-allday-before',
+        event_time: ALLDAY,
+        notification_options: [{ type_text: 'before', before_seconds: 600 }],
+      }),
+    ).rejects.toMatchObject(invalidParameter)
+  })
+
+  it('update_schedule — 빈 배열로 알림을 비운다', async () => {
+    const auth = makeIntegrationAuth()
+    const created = (await createSchedule.execute(auth, {
+      name: 'notif-clear',
+      event_time: atTime(T1_ISO),
+      notification_options: [{ type_text: 'at_time' }],
+    })) as Schedule
+
+    const updated = (await updateSchedule.execute(auth, {
+      schedule_id: created.uuid,
+      notification_options: [],
+    })) as Schedule
+
+    expect(updated.notification_options ?? []).toEqual([])
+  })
+})

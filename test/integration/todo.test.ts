@@ -103,3 +103,57 @@ describe.skipIf(!readiness.ready)('integration: todo happy path', () => {
     expect(step2.status).toBe('ok')
   })
 })
+
+const AT_ISO = '2026-11-20T14:30:00+09:00'
+const ALLDAY = {
+  time_type: 'allday' as const,
+  period_start: '2026-11-20T00:00:00+09:00',
+  period_end: '2026-11-20T23:59:59+09:00',
+}
+const invalidParameter = { status: 400, code: 'InvalidParameter' }
+
+describe.skipIf(!readiness.ready)('integration: todo notification_options (Functions#364)', () => {
+  it('create_todo — 프리셋 옵션이 그대로 저장돼 돌아온다', async () => {
+    const auth = makeIntegrationAuth()
+    const options = [{ type_text: 'at_time' }, { type_text: 'before', before_seconds: 600 }]
+
+    const created = (await createTodo.execute(auth, {
+      name: 'notif-create',
+      event_time: { time_type: 'at', timestamp: AT_ISO },
+      notification_options: options,
+    })) as { notification_options: unknown }
+
+    expect(created.notification_options).toEqual(options)
+  })
+
+  it('create_todo — 프리셋 밖 before_seconds 는 ToolError 400 InvalidParameter', async () => {
+    const auth = makeIntegrationAuth()
+    await expect(
+      createTodo.execute(auth, {
+        name: 'notif-bad-seconds',
+        event_time: { time_type: 'at', timestamp: AT_ISO },
+        notification_options: [{ type_text: 'before', before_seconds: 1234 }],
+      }),
+    ).rejects.toMatchObject(invalidParameter)
+  })
+
+  it('update_todo — event_time 만 종일로 바꾸면 저장된 before 때문에 400, 옵션을 함께 보내면 통과', async () => {
+    const auth = makeIntegrationAuth()
+    const created = (await createTodo.execute(auth, {
+      name: 'notif-switch-allday',
+      event_time: { time_type: 'at', timestamp: AT_ISO },
+      notification_options: [{ type_text: 'before', before_seconds: 600 }],
+    })) as { uuid: string }
+
+    await expect(
+      updateTodo.execute(auth, { todo_id: created.uuid, event_time: ALLDAY }),
+    ).rejects.toMatchObject(invalidParameter)
+
+    const updated = (await updateTodo.execute(auth, {
+      todo_id: created.uuid,
+      event_time: ALLDAY,
+      notification_options: [{ type_text: 'allDay9AM' }],
+    })) as { notification_options: unknown }
+    expect(updated.notification_options).toEqual([{ type_text: 'allDay9AM' }])
+  })
+})
