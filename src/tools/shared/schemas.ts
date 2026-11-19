@@ -158,6 +158,35 @@ export const repeatingSchema = z
   })
   .describe('Recurrence rule with start, option payload, and optional end (date or count). Responses also include `start_iso` / `end_iso` (UTC ISO).')
 
+// 모양만 강제한다. 정수 여부·before_seconds 허용값·종일 적합성은 openAPI 가 presets.json 으로 판정 (Functions#364).
+// .int() 는 JSON Schema 에 safe-integer 범위를 붙여 쓰기 tool 7개의 tools/list 페이로드를 불린다.
+const notificationOptionInput = z.discriminatedUnion('type_text', [
+  z.object({ type_text: z.literal('at_time') }),
+  z.object({ type_text: z.literal('before'), before_seconds: z.number() }),
+  z.object({ type_text: z.literal('allDay9AM') }),
+  z.object({ type_text: z.literal('allDay12AM') }),
+  z.object({ type_text: z.literal('allDay9AMBefore'), before_seconds: z.number() }),
+  z.object({
+    type_text: z.literal('custom'),
+    custom_components: z
+      .object({
+        year: z.number(),
+        month: z.number(),
+        day: z.number(),
+        hour: z.number(),
+        minute: z.number(),
+        second: z.number().optional(),
+      })
+      .describe("Wall-clock time in the receiving device's local timezone (not an epoch)."),
+  }),
+])
+
+export const notificationOptionsInputSchema = z
+  .array(notificationOptionInput)
+  .describe(
+    "Notification options discriminated by 'type_text'. Non all-day events: 'at_time' | 'before'. All-day events: 'allDay9AM' | 'allDay12AM' | 'allDay9AMBefore'. Either: 'custom'.",
+  )
+
 export const todoSchema = z
   .object({
     uuid: z.string().describe('Stable id used to reference this todo in subsequent calls.'),
