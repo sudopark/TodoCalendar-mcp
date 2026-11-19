@@ -10,6 +10,7 @@ import {
   eventTimeInputSchema,
   expandedEventSchema,
   isoToTsField,
+  notificationOptionsInputSchema,
   occurrenceSchema,
   repeatingInputSchema,
   todoOriginEchoSchema,
@@ -203,10 +204,11 @@ const todoInputSchema = z
         "Optional schedule for the todo. Omit to create a 'current' (non-time-bound) todo that stays visible until completed.",
       ),
     repeating: repeatingInputSchema.optional().describe('Optional recurrence rule.'),
-    notification_options: z
-      .array(z.unknown())
+    notification_options: notificationOptionsInputSchema
       .optional()
-      .describe('Optional notification config objects (opaque shape — see TodoCalendar app docs).'),
+      .describe(
+        "Optional notification options. Each item is discriminated by 'type_text' and must fit the event's all-day-ness — see describe_tool docs for allowed values.",
+      ),
   })
   .describe(
     'Todo creation payload (used by create_todo and replace_todo `new`). The owner is taken from the auth context — never pass userId here.',
@@ -258,10 +260,11 @@ const updateTodoInput = z
     repeating: repeatingInputSchema
       .optional()
       .describe('Replacement recurrence rule. Omit to keep unchanged.'),
-    notification_options: z
-      .array(z.unknown())
+    notification_options: notificationOptionsInputSchema
       .optional()
-      .describe('Replacement notification config objects (opaque shape). Omit to keep unchanged.'),
+      .describe(
+        "Replaces the whole notification list (send [] to clear). Omit to keep unchanged. Each item is discriminated by 'type_text' — see describe_tool docs for allowed values.",
+      ),
   })
   .describe(
     'Partial update for an existing todo (PATCH). All body fields except todo_id are optional — only the fields you provide are applied.',

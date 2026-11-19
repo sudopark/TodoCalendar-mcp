@@ -79,7 +79,7 @@ describe('update_todo — happy path', () => {
   })
 
   it('repeating + notification_options — ISO 입력 → ts body', async () => {
-    const notifs = [{ type: 'at_time' }]
+    const notifs = [{ type_text: 'at_time' }]
     await updateTodo.execute(auth, {
       todo_id: 't-1',
       repeating: {
@@ -123,6 +123,16 @@ describe('update_todo — happy path', () => {
 })
 
 describe('update_todo — input validation', () => {
+  it('notification_options 모양이 틀리면 — zod throw, 백엔드 호출 X', async () => {
+    await expect(
+      updateTodo.execute(auth, {
+        todo_id: 't-1',
+        notification_options: [{ type_text: 'before', minutes: 10 }],
+      }),
+    ).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
+  })
+
   it('todo_id 빈 문자열 — zod throw, 백엔드 호출 X', async () => {
     await expect(updateTodo.execute(auth, { todo_id: '', name: 'x' })).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)

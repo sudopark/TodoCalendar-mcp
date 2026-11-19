@@ -100,7 +100,7 @@ describe('create_todo — happy path', () => {
   })
 
   it('repeating + notification_options — ISO 입력 → ts body', async () => {
-    const notifs = [{ type: 'at_time' }]
+    const notifs = [{ type_text: 'at_time' }]
     await createTodo.execute(auth, {
       name: 'daily-standup',
       repeating: {
@@ -139,6 +139,16 @@ describe('create_todo — happy path', () => {
 })
 
 describe('create_todo — input validation', () => {
+  it('notification_options 모양이 틀리면 — zod throw, 백엔드 호출 X', async () => {
+    await expect(
+      createTodo.execute(auth, {
+        name: 'x',
+        notification_options: [{ type_text: 'before', minutes: 10 }],
+      }),
+    ).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
+  })
+
   it('name 누락 — zod throw, 백엔드 호출 X', async () => {
     await expect(createTodo.execute(auth, {})).rejects.toThrow()
     expect(openApiSpy.callCount).toBe(0)

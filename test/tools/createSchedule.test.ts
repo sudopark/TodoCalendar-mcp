@@ -94,7 +94,7 @@ describe('create_schedule — happy path', () => {
   })
 
   it('repeating·event_tag_id·notification_options·show_turns — ISO 입력 → ts body', async () => {
-    const notifs = [{ type: 'before', minutes: 10 }]
+    const notifs = [{ type_text: 'before', before_seconds: 600 }]
     const showTurns = { '1700003600': true }
     await createSchedule.execute(auth, {
       name: 'weekly',
@@ -143,6 +143,16 @@ describe('create_schedule — happy path', () => {
 })
 
 describe('create_schedule — input validation', () => {
+  it('notification_options 모양이 틀리면 — zod throw, 백엔드 호출 X', async () => {
+    await expect(
+      createSchedule.execute(auth, {
+        name: 'x', event_time: minimalEventTimeIso,
+        notification_options: [{ type_text: 'before', minutes: 10 }],
+      }),
+    ).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
+  })
+
   it('name 누락 — zod throw, 백엔드 호출 X', async () => {
     await expect(
       createSchedule.execute(auth, { event_time: minimalEventTimeIso }),
