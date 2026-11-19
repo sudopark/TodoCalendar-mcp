@@ -187,6 +187,18 @@ export const notificationOptionsInputSchema = z
     "Notification options discriminated by 'type_text'. Non all-day events: 'at_time' | 'before'. All-day events: 'allDay9AM' | 'allDay12AM' | 'allDay9AMBefore'. Either: 'custom'.",
   )
 
+export const notificationOptionsDocs = `\
+Notification options (\`notification_options\`): an array of objects discriminated by 'type_text'. The openAPI rejects (400 InvalidParameter) values outside these presets and options that don't fit the event's all-day-ness.
+  - Non all-day events (event_time 'at' | 'period'):
+    - { type_text: 'at_time' } — at the start time
+    - { type_text: 'before', before_seconds } — before_seconds ∈ 60, 300, 600, 900, 1800, 3600, 7200, 86400, 172800, 604800
+  - All-day events (event_time 'allday'):
+    - { type_text: 'allDay9AM' } — 09:00 on the day
+    - { type_text: 'allDay12AM' } — 12:00 NOON on the day (not midnight)
+    - { type_text: 'allDay9AMBefore', before_seconds } — 09:00, N days before; before_seconds ∈ 86400, 172800, 604800
+  - Either: { type_text: 'custom', custom_components: { year, month, day, hour, minute, second? } } — integer wall-clock time in the receiving device's local timezone (not an epoch, not ISO).
+Todos without event_time are never notified. On update_todo / update_schedule the list is replaced as a whole; when switching event_time between all-day and non all-day, send fitting notification_options in the same call — otherwise the stored options are re-validated against the new event_time and the call fails with 400.`
+
 // 출력은 런타임 unknown — complete_todo origin echo 가 todoSchema 를 parse 하므로 타입을 박으면 저장된 옵션이 거절될 수 있다.
 const notificationOptionsOutputField = z
   .array(z.unknown())

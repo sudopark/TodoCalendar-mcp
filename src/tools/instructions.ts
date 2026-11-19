@@ -15,6 +15,11 @@ response back (e.g. complete_todo 'origin', get_done_todos 'cursor'), pass the r
 verbatim — do NOT convert its timestamps to ISO.
 - \`event_time\` is a tagged union discriminated by \`time_type\` ('at' | 'period' | 'allday'). \
 \`repeating.option\` is discriminated by \`optionType\`.
+- Notifications: \`notification_options\` items are discriminated by \`type_text\` and must fit the \
+event's all-day-ness ('at_time' | 'before' for non all-day, 'allDay9AM' | 'allDay12AM' | \
+'allDay9AMBefore' for all-day, 'custom' for either). Allowed \`before_seconds\` values are in \
+describe_tool docs of the write tools. When an update switches \`event_time\` between all-day and \
+non all-day, send fitting \`notification_options\` in the same call.
 - CONFIRM-gated tools (delete_todo, delete_schedule): the first call does NOT mutate — it returns \
 { status: 'confirm_required', message, confirmToken }. Surface \`message\` to the end user; on \
 approval re-call with the SAME arguments plus confirmToken (expires in 5 minutes, bound to \

@@ -10,6 +10,7 @@ import {
   eventTimeInputSchema,
   expandedEventSchema,
   isoToTsField,
+  notificationOptionsDocs,
   notificationOptionsInputSchema,
   occurrenceSchema,
   repeatingInputSchema,
@@ -231,7 +232,9 @@ Create a new todo for the authenticated user. Omit 'event_time' to create a 'cur
   docs: `\
 Create a new todo for the authenticated user. Returns the created todo with its assigned uuid.
 
-If 'event_time' is omitted the todo is created in 'current' mode (non-time-bound, always visible until completed). The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
+If 'event_time' is omitted the todo is created in 'current' mode (non-time-bound, always visible until completed). The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.
+
+${notificationOptionsDocs}`,
   inputSchema: createTodoInput,
   outputSchema: createTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<CreateTodoOutput> => {
@@ -285,7 +288,9 @@ Partially update a todo (PATCH) — only the fields you provide are applied. Ret
   docs: `\
 Partially update a todo's fields (PATCH). Returns the full updated todo.
 
-Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
+Only the fields you include in the body are applied — omitted fields stay as-is. The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). The 'repeating.option' field is a discriminated object by 'optionType' (see field description for variants). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.
+
+${notificationOptionsDocs}`,
   inputSchema: updateTodoInput,
   outputSchema: updateTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<UpdateTodoOutput> => {
@@ -418,7 +423,9 @@ Decision guide for the agent:
   - To replace a single occurrence of a repeating todo (other occurrences continue): set 'origin_next_event_time' to the next event_time of the origin so the origin advances past this turn.
   - To replace the entire repeating series (no more occurrences from origin): omit 'origin_next_event_time' — the origin is deleted after the new todo is created.
 
-The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.`,
+The 'event_time' field is a tagged union by 'time_type' ('at' | 'period' | 'allday'). All input time fields are ISO 8601 strings WITH timezone offset (e.g. "2026-05-22T10:00:00+09:00") — the server converts to Unix seconds. In responses, every absolute-time field has a sibling \`*_iso\` field (UTC ISO; for \`allday\`, a YYYY-MM-DD local date). Raw Unix-second fields are preserved alongside.
+
+${notificationOptionsDocs}`,
   inputSchema: replaceTodoInput,
   outputSchema: replaceTodoOutput,
   execute: async (auth: Auth, args: unknown): Promise<ReplaceTodoOutput> => {
