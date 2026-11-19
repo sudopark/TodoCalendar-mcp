@@ -69,3 +69,30 @@ describe('describe_tool', () => {
     expect(JSON.stringify(result.output_schema)).not.toContain('"additionalProperties":false')
   })
 })
+
+describe('notification_options 가이드', () => {
+  it.each([
+    'create_todo',
+    'update_todo',
+    'replace_todo',
+    'create_schedule',
+    'update_schedule',
+    'replace_schedule_occurrence',
+    'branch_schedule_repeating',
+  ])('%s docs — 종일 여부별 type_text 와 before_seconds 허용값', async (name) => {
+    const { docs } = (await describeTool.execute(auth, { name })) as { docs: string }
+
+    expect(docs).toContain('allDay9AMBefore')
+    expect(docs).toContain('60, 300, 600, 900, 1800, 3600, 7200, 86400, 172800, 604800')
+    expect(docs).toContain('86400, 172800, 604800')
+    expect(docs).toContain('custom_components')
+  })
+
+  it('usageInstructions — 종일 적합성과 PATCH 함정을 공통 정책으로', async () => {
+    const { usageInstructions } = await import('../../src/tools/instructions.js')
+
+    expect(usageInstructions).toContain('notification_options')
+    expect(usageInstructions).toContain('all-day')
+    expect(usageInstructions).toContain('event_time')
+  })
+})
