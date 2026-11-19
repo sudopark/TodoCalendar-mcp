@@ -187,6 +187,14 @@ export const notificationOptionsInputSchema = z
     "Notification options discriminated by 'type_text'. Non all-day events: 'at_time' | 'before'. All-day events: 'allDay9AM' | 'allDay12AM' | 'allDay9AMBefore'. Either: 'custom'.",
   )
 
+// 출력은 런타임 unknown — complete_todo origin echo 가 todoSchema 를 parse 하므로 타입을 박으면 저장된 옵션이 거절될 수 있다.
+const notificationOptionsOutputField = z
+  .array(z.unknown())
+  .nullish()
+  .describe(
+    "Notification options, same shape as the write tools' input: items discriminated by 'type_text' ('at_time' | 'before' + before_seconds | 'allDay9AM' | 'allDay12AM' | 'allDay9AMBefore' + before_seconds | 'custom' + custom_components).",
+  )
+
 export const todoSchema = z
   .object({
     uuid: z.string().describe('Stable id used to reference this todo in subsequent calls.'),
@@ -209,10 +217,7 @@ export const todoSchema = z
     event_tag_id: z.string().nullish(),
     event_time: eventTimeSchema.optional(),
     repeating: repeatingSchema.optional(),
-    notification_options: z
-      .array(z.unknown())
-      .nullish()
-      .describe('Opaque notification config objects (see TodoCalendar app docs for shape).'),
+    notification_options: notificationOptionsOutputField,
     repeating_turn: z
       .string()
       .nullish()
@@ -244,7 +249,7 @@ export const doneTodoSchema = z
     done_at: z.number().nullish().describe(`${TS_SEC} Null if completion time is unknown.`),
     event_time: eventTimeSchema.optional(),
     event_tag_id: z.string().nullish(),
-    notification_options: z.array(z.unknown()).nullish(),
+    notification_options: notificationOptionsOutputField,
   })
   .describe('A completed (done) todo. Raw Unix-second timestamps are preserved; responses also include `done_at_iso` and `event_time` `*_iso` siblings.')
 
@@ -256,7 +261,7 @@ export const scheduleSchema = z
     event_tag_id: z.string().nullish(),
     event_time: eventTimeSchema.optional(),
     repeating: repeatingSchema.optional(),
-    notification_options: z.array(z.unknown()).nullish(),
+    notification_options: notificationOptionsOutputField,
     show_turns: z
       .record(z.string(), z.unknown())
       .nullish()

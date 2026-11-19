@@ -85,7 +85,7 @@ describe('update_schedule — happy path', () => {
 
   it('repeating + show_turns + notification_options + event_tag_id — ISO 입력 → ts body', async () => {
     const showTurns = { '1700003600': true }
-    const notifs = [{ type: 'before', minutes: 10 }]
+    const notifs = [{ type_text: 'before', before_seconds: 600 }]
     await updateSchedule.execute(auth, {
       schedule_id: 's-1',
       event_tag_id: 'tag-1',
@@ -133,6 +133,16 @@ describe('update_schedule — happy path', () => {
 })
 
 describe('update_schedule — input validation', () => {
+  it('notification_options 모양이 틀리면 — zod throw, 백엔드 호출 X', async () => {
+    await expect(
+      updateSchedule.execute(auth, {
+        schedule_id: 's-1',
+        notification_options: [{ type_text: 'before', minutes: 10 }],
+      }),
+    ).rejects.toThrow()
+    expect(openApiSpy.callCount).toBe(0)
+  })
+
   it('schedule_id 빈 문자열 — zod throw, 백엔드 호출 X', async () => {
     await expect(
       updateSchedule.execute(auth, { schedule_id: '', name: 'x' }),

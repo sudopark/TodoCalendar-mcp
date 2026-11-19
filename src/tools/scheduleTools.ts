@@ -8,6 +8,7 @@ import {
   eventTimeInputSchema,
   expandedEventSchema,
   isoToTsField,
+  notificationOptionsInputSchema,
   occurrenceSchema,
   repeatingInputSchema,
   scheduleSchema,
@@ -152,10 +153,11 @@ const scheduleInputSchema = z
       .optional()
       .describe('Optional tag uuid to categorize this schedule.'),
     repeating: repeatingInputSchema.optional().describe('Optional recurrence rule.'),
-    notification_options: z
-      .array(z.unknown())
+    notification_options: notificationOptionsInputSchema
       .optional()
-      .describe('Optional notification config objects (opaque shape — see TodoCalendar app docs).'),
+      .describe(
+        "Optional notification options. Each item is discriminated by 'type_text' and must fit the event's all-day-ness — see describe_tool docs for allowed values.",
+      ),
     show_turns: z
       .record(z.string(), z.unknown())
       .optional()
@@ -213,10 +215,11 @@ const updateScheduleInput = z
     repeating: repeatingInputSchema
       .optional()
       .describe('Replacement recurrence rule. Omit to keep unchanged.'),
-    notification_options: z
-      .array(z.unknown())
+    notification_options: notificationOptionsInputSchema
       .optional()
-      .describe('Replacement notification config objects (opaque shape). Omit to keep unchanged.'),
+      .describe(
+        "Replaces the whole notification list (send [] to clear). Omit to keep unchanged. Each item is discriminated by 'type_text' — see describe_tool docs for allowed values.",
+      ),
     show_turns: z
       .record(z.string(), z.unknown())
       .optional()
